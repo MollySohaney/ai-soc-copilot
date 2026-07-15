@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ..components.layout import render_page_header
+from ..components.theme import render_shell_end, render_shell_start
 from config.settings import AppConfig
 
 
@@ -14,9 +14,15 @@ def render(config: AppConfig) -> None:
     Args:
         config: Application configuration.
     """
-    render_page_header(
+    render_shell_start(
         title="Settings",
-        description="Read-only runtime settings loaded during application startup.",
+        description="Read-only runtime configuration loaded during application startup.",
+        breadcrumb="SOC workspace / settings",
+        status_chips=[
+            ("Config source", "Environment"),
+            ("Access", "Read only"),
+        ],
     )
 
     st.json(config.to_safe_dict())
+    render_shell_end()

@@ -14,6 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.components.theme import apply_theme, render_sidebar_brand
 from app.views import analyze_alert, dashboard, mitre_explorer, reports, settings
 from backend.services.health_service import HealthService
 from backend.services.upload_service import AlertUploadService
@@ -89,9 +90,12 @@ def main() -> None:
     logger = get_logger(__name__)
 
     configure_streamlit_page(config)
+    apply_theme()
 
-    st.sidebar.title(config.app_name)
-    st.sidebar.caption("Security operations assistant foundation")
+    render_sidebar_brand(
+        title=config.app_name,
+        subtitle="AI-assisted security operations workspace",
+    )
 
     navigation = build_navigation()
     selection = st.sidebar.radio(

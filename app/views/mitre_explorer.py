@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ..components.layout import render_page_header, render_placeholder_notice
+from ..components.layout import render_html_block, render_placeholder_notice
+from ..components.theme import render_shell_end, render_shell_start
 from config.settings import AppConfig
 
 
@@ -12,11 +13,16 @@ def render(config: AppConfig) -> None:
     Args:
         config: Application configuration.
     """
-    _ = config
-    render_page_header(
+    render_shell_start(
         title="MITRE Explorer",
-        description="Future home for ATT&CK-aligned exploration workflows.",
+        description="Reserved space for ATT&CK-aligned mapping, tactic exploration, and detection coverage views.",
+        breadcrumb="SOC workspace / mitre",
+        status_chips=[
+            ("Dataset", "Not loaded"),
+            ("Lookup mode", "Disabled"),
+        ],
     )
+    render_html_block('<div class="soc-card glow">')
     render_placeholder_notice(
         title="Not Yet Implemented",
         body=(
@@ -24,3 +30,5 @@ def render(config: AppConfig) -> None:
             "The current scaffold keeps navigation and page boundaries in place without adding lookup logic."
         ),
     )
+    render_html_block("</div>")
+    render_shell_end()

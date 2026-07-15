@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import streamlit as st
-
-from ..components.layout import render_page_header, render_placeholder_notice
+from ..components.layout import render_html_block, render_placeholder_notice, render_stat_list
+from ..components.theme import render_shell_end, render_shell_start
 from config.settings import AppConfig
 
 
@@ -14,10 +13,16 @@ def render(config: AppConfig) -> None:
     Args:
         config: Application configuration.
     """
-    render_page_header(
+    render_shell_start(
         title="Reports",
-        description="Scaffolded reporting area for future analyst outputs and evidence summaries.",
+        description="Scaffolded reporting area for analyst narratives, evidence exports, and executive summaries.",
+        breadcrumb="SOC workspace / reports",
+        status_chips=[
+            ("Output mode", "Placeholder"),
+            ("Export target", "Local only"),
+        ],
     )
+    render_html_block('<div class="soc-grid"><div class="soc-stack"><div class="soc-card glow">')
     render_placeholder_notice(
         title="Report Generation Pending",
         body=(
@@ -25,11 +30,23 @@ def render(config: AppConfig) -> None:
             "and analysis boundaries are established."
         ),
     )
-
-    st.subheader("Planned Outputs")
-    st.markdown(
-        "- Executive incident summaries\n"
-        "- Analyst evidence notes\n"
-        "- Detection coverage snapshots\n"
-        "- AI-assisted triage explainability artifacts"
+    render_html_block("</div><div class=\"soc-card\"><div class=\"soc-card-label\">Planned outputs</div>")
+    render_stat_list(
+        [
+            ("Executive incident summary", "Planned"),
+            ("Analyst evidence notes", "Planned"),
+            ("Detection coverage snapshot", "Planned"),
+            ("AI explainability artifact", "Planned"),
+        ]
     )
+    render_html_block("</div></div><div class=\"soc-stack\"><div class=\"soc-card glow\"><div class=\"soc-card-label\">Reporting posture</div>")
+    render_stat_list(
+        [
+            ("Persistence layer", "Not implemented"),
+            ("Export format", "TBD"),
+            ("Approval workflow", "Not implemented"),
+            ("Audit trail", "Planned"),
+        ]
+    )
+    render_html_block("</div></div></div>")
+    render_shell_end()
