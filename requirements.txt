@@ -1,0 +1,7 @@
+# Purpose: Define the minimal runtime dependencies for the project scaffold.
+
+streamlit==1.59.2
+pandas==3.0.3
+pydantic==2.13.4
+python-dotenv==1.2.2
+pytest==8.4.2

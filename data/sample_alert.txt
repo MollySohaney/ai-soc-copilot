@@ -1,0 +1,16 @@
+Alert ID: ALT-2026-0201
+Timestamp: 2026-07-14T19:55:00Z
+Severity: high
+Source: firewall
+Title: Repeated Denied Connections To Administrative Port
+Host: dmz-jump-01
+User: unknown
+Status: new
+
+Summary:
+The firewall detected repeated connection attempts from a single external IP address to TCP/3389 on a hardened jump host in the DMZ. The attempts were denied by policy, but the repetition rate exceeded the environment threshold and triggered analyst review.
+
+Initial Analyst Notes:
+- Confirm whether the source IP appears in prior investigations.
+- Check for correlated authentication failures on the target host.
+- Preserve the firewall log excerpt for later reporting.

@@ -68,6 +68,7 @@ This scaffold does not yet include:
 - Configuration is loaded through `config.settings`.
 - Business logic stays in `backend/`; UI rendering stays in `app/`.
 - Tests can be added incrementally under `tests/`.
+- Sample upload fixtures are available in `data/`.
 
 ## Suggested Next Steps
 
