@@ -8,6 +8,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from .layout import dedent_html
+
 
 THEME_PATH = Path(__file__).resolve().parents[1] / "styles" / "theme.css"
 
@@ -27,35 +29,60 @@ def apply_theme() -> None:
     st.markdown(f"<style>{load_theme_stylesheet()}</style>", unsafe_allow_html=True)
 
 
-def render_sidebar_brand(title: str, subtitle: str) -> None:
+def render_sidebar_brand(title: str, subtitle: str = "") -> None:
     """Render custom branding at the top of the sidebar.
 
     Args:
         title: Product name.
-        subtitle: Short supporting description.
+        subtitle: Short supporting subtitle shown beneath the wordmark.
     """
+    subtitle_markup = (
+        f'<div style="color:#7282a9; font-size:0.74rem; letter-spacing:0.03em; margin-top:0.2rem;">{escape(subtitle)}</div>'
+        if subtitle
+        else ""
+    )
     st.sidebar.markdown(
-        f"""
-        <div style="padding: 0.35rem 0 1.4rem;">
-          <div style="display:flex; align-items:center; gap:0.8rem; margin-bottom:0.8rem;">
+        dedent_html(f"""
+        <div style="padding: 1.15rem 0 2.6rem; margin-top: 0.45rem;">
+          <div style="display:flex; align-items:center; gap:0.9rem; min-height:54px;">
             <div style="
-              width:44px; height:44px; border-radius:14px;
+              width:52px; height:46px; border-radius:16px;
               background: radial-gradient(circle at top left, #89a5ff, #3556d8 58%, #15254d 100%);
               box-shadow: 0 10px 25px rgba(91, 124, 255, 0.35);
               display:flex; align-items:center; justify-content:center;
-              color:white; font-size:1.15rem; font-weight:700;
+              color:white; font-size:1.1rem; font-weight:700;
+              flex:0 0 auto;
             ">AI</div>
             <div>
-              <div style="color:#f4f7ff; font-size:1.28rem; font-weight:800; letter-spacing:-0.03em;">
+              <div style="color:#f4f7ff; font-size:1.24rem; font-weight:800; letter-spacing:-0.03em; line-height:1; white-space:nowrap;">
                 {escape(title)}
               </div>
-              <div style="color:#91a0c7; font-size:0.86rem; margin-top:0.12rem;">
-                {escape(subtitle)}
-              </div>
+              {subtitle_markup}
             </div>
           </div>
         </div>
-        """,
+        """),
+        unsafe_allow_html=True,
+    )
+
+
+def render_sidebar_status() -> None:
+    """Render the system status block pinned to the bottom of the sidebar."""
+    st.sidebar.markdown(
+        dedent_html("""
+        <div class="soc-status-panel">
+          <div class="soc-status-title">System Status</div>
+          <div class="soc-status-row">
+            <span>Local AI</span>
+            <span class="soc-status-dot">Ready</span>
+          </div>
+          <div class="soc-status-row">
+            <span>Threat Intel</span>
+            <span class="soc-status-dot mock">Mock Mode</span>
+          </div>
+          <div class="soc-status-version">Version v0.1.0</div>
+        </div>
+        """),
         unsafe_allow_html=True,
     )
 
@@ -79,7 +106,7 @@ def render_shell_start(
         for label, value in status_chips
     )
     st.markdown(
-        f"""
+        dedent_html(f"""
         <section class="soc-shell">
           <div class="soc-topbar">
             <div>
@@ -89,7 +116,7 @@ def render_shell_start(
             </div>
             <div class="soc-chip-row">{chip_markup}</div>
           </div>
-        """,
+        """),
         unsafe_allow_html=True,
     )
 
