@@ -85,5 +85,3 @@ Return a handoff summary with:
 - **Branch**: the branch name
 - **PR URL**: the URL returned by `gh pr create`
 - **Stash**: whether changes were stashed and the stash message (or "none")
-</content>
-</invoke>
