@@ -64,6 +64,14 @@ docker compose up -d
 alembic upgrade head
 ```
 
+7. Seed deterministic demo data (a full SSH brute-force -> valid-login -> privilege-escalation -> persistence attack chain, plus benign noise events, alerts, detection rules, and cases):
+
+```bash
+python -m db.seed
+```
+
+This command is idempotent: every row is looked up by a natural key before insert, so re-running it against the same database does not create duplicates.
+
 ## Current Scope
 
 This scaffold includes:
@@ -89,6 +97,7 @@ This scaffold does not yet include:
 - Persistence (SQLAlchemy ORM models, sessions, migrations) lives in `db/` and `alembic/`, separate from `backend/` (Streamlit view models) and `api/schemas/` (HTTP DTOs).
 - Tests can be added incrementally under `tests/`.
 - Sample upload fixtures are available in `data/`.
+- `db/seed.py` provides deterministic demo data (`python -m db.seed`); it derives every timestamp from a fixed constant rather than the current time so repeated clean runs produce identical records.
 
 ## Suggested Next Steps
 
