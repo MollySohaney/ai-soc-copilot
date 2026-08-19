@@ -1,0 +1,4 @@
+alert_id,timestamp,severity,source,title,host,user,status
+ALT-2026-0101,2026-07-14T20:05:00Z,critical,siem,Impossible Travel Sign-In,identity-portal,mgarcia,new
+ALT-2026-0102,2026-07-14T20:17:00Z,high,network_sensor,Outbound Connection To Rare Domain,fw-edge-02,unknown,new
+ALT-2026-0103,2026-07-14T20:44:00Z,medium,email_gateway,Suspicious Attachment Delivered,mail-gateway,adoe,triage

