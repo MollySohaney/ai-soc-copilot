@@ -4,6 +4,7 @@ AI SOC Copilot is structured to keep the Streamlit user interface isolated from 
 
 ## Layers
 
+- `api/`: FastAPI HTTP surface exposing versioned endpoints (`/api/v1`); runs as a separate process from the Streamlit app and is not the place for business logic, which stays in `backend/`.
 - `app/`: Page rendering and shared UI components only.
 - `backend/models/`: Typed data contracts passed between services and the UI.
 - `backend/security/`: Validation and security-focused controls.
