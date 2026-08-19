@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
-from api.schemas.alert import AlertCreate, AlertRead
+from api.schemas.alert import (
+    AlertCreate,
+    AlertEventsRead,
+    AlertRead,
+    AlertUpdate,
+    PaginatedAlerts,
+)
 from api.schemas.case import CaseCreate, CaseRead
 from api.schemas.case_activity import CaseActivityCreate, CaseActivityRead
 from api.schemas.detection_rule import DetectionRuleCreate, DetectionRuleRead
-from api.schemas.event import EventCreate, EventRead
+from api.schemas.event import EventCreate, EventRead, PaginatedEvents
 
 __all__ = [
     "AlertCreate",
+    "AlertEventsRead",
     "AlertRead",
+    "AlertUpdate",
+    "PaginatedAlerts",
     "CaseCreate",
     "CaseRead",
     "CaseActivityCreate",
@@ -19,4 +28,5 @@ __all__ = [
     "DetectionRuleRead",
     "EventCreate",
     "EventRead",
+    "PaginatedEvents",
 ]
