@@ -15,11 +15,13 @@ AI SOC Copilot is a production-oriented Python application scaffold for SOC anal
 ## Project Structure
 
 ```text
+alembic/
 api/
 app/
 backend/
 config/
 data/
+db/
 docs/
 logs/
 tests/
@@ -50,6 +52,18 @@ streamlit run app/main.py
 uvicorn api.main:app --reload --port 8000
 ```
 
+5. Start PostgreSQL (used by the persistence layer in `db/`):
+
+```bash
+docker compose up -d
+```
+
+6. Apply database migrations:
+
+```bash
+alembic upgrade head
+```
+
 ## Current Scope
 
 This scaffold includes:
@@ -72,6 +86,7 @@ This scaffold does not yet include:
 - Runtime logs are written to `logs/app.log`.
 - Configuration is loaded through `config.settings`.
 - Business logic stays in `backend/`; UI rendering stays in `app/`.
+- Persistence (SQLAlchemy ORM models, sessions, migrations) lives in `db/` and `alembic/`, separate from `backend/` (Streamlit view models) and `api/schemas/` (HTTP DTOs).
 - Tests can be added incrementally under `tests/`.
 - Sample upload fixtures are available in `data/`.
 
