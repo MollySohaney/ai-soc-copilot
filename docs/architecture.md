@@ -5,6 +5,7 @@ AI SOC Copilot is structured to keep the Streamlit user interface isolated from 
 ## Layers
 
 - `api/`: FastAPI HTTP surface exposing versioned endpoints (`/api/v1`); runs as a separate process from the Streamlit app and is not the place for business logic, which stays in `backend/`.
+- `api/schemas/`: Pydantic request/response DTOs for the HTTP API, distinct from both the Streamlit view models in `backend/models/` and the SQLAlchemy ORM models in `db/models/`.
 - `app/`: Page rendering and shared UI components only.
 - `backend/models/`: Typed data contracts passed between services and the UI.
 - `backend/security/`: Validation and security-focused controls.
@@ -12,6 +13,20 @@ AI SOC Copilot is structured to keep the Streamlit user interface isolated from 
 - `backend/services/`: Business workflows and orchestration.
 - `backend/utils/`: Cross-cutting utilities such as logging.
 - `config/`: Centralized runtime configuration.
+- `db/`: The persistence layer — SQLAlchemy 2.0 ORM models (`db/models/`), the declarative `Base`, the engine/session factory (`db/session.py`), and the FastAPI `get_db()` dependency. This is where SOC data (events, alerts, cases, detection rules) is defined and stored; it is not the same as `backend/` (Streamlit UI logic) or `api/schemas/` (HTTP DTOs).
+- `alembic/`: Database migrations, generated from `db/models`'s metadata.
+
+## Database
+
+PostgreSQL is the system of record for SOC data. For local development:
+
+```bash
+docker compose up -d      # start Postgres (postgres:16-alpine, named volume, healthcheck)
+alembic upgrade head      # apply migrations
+alembic downgrade -1      # roll back one migration, if needed
+```
+
+Connection settings are read from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` (see `.env.example`), assembled into `config.settings.AppConfig.database_url`. Both `db/session.py` and `alembic/env.py` build their connection from this same setting, so application code and migrations never drift apart.
 
 ## Design Principles
 

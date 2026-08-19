@@ -25,6 +25,23 @@ class AppConfig(BaseModel):
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000)
     frontend_origins: list[str] = Field(default_factory=lambda: ["http://localhost:8501"])
+    postgres_host: str = Field(default="localhost")
+    postgres_port: int = Field(default=5432)
+    postgres_db: str = Field(default="ai_soc_copilot")
+    postgres_user: str = Field(default="postgres")
+    postgres_password: str = Field(default="postgres")
+
+    @property
+    def database_url(self) -> str:
+        """Build the SQLAlchemy database URL from the configured Postgres settings.
+
+        Returns:
+            A postgresql+psycopg connection URL.
+        """
+        return (
+            f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
     @field_validator("log_level")
     @classmethod
@@ -129,4 +146,9 @@ def load_config() -> AppConfig:
         api_host=os.getenv("API_HOST", "0.0.0.0"),
         api_port=int(os.getenv("API_PORT", "8000")),
         frontend_origins=frontend_origins.split(","),
+        postgres_host=os.getenv("POSTGRES_HOST", "localhost"),
+        postgres_port=int(os.getenv("POSTGRES_PORT", "5432")),
+        postgres_db=os.getenv("POSTGRES_DB", "ai_soc_copilot"),
+        postgres_user=os.getenv("POSTGRES_USER", "postgres"),
+        postgres_password=os.getenv("POSTGRES_PASSWORD", "postgres"),
     )
