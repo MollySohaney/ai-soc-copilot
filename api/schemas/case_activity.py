@@ -27,3 +27,18 @@ class CaseActivityRead(CaseActivityBase):
 
     id: int
     created_at: datetime
+
+
+class CaseActivityCreateRequest(BaseModel):
+    """Represent the payload required to create a case activity entry via the API."""
+
+    activity_type: str = "note"
+    message: str
+    author: str | None = None
+
+
+class PaginatedCaseActivities(BaseModel):
+    """Represent a page of case activity entries."""
+
+    items: list[CaseActivityRead]
+    total: int

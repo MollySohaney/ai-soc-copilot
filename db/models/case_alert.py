@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
 
@@ -22,3 +22,6 @@ class CaseAlert(Base):
     added_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+    case = relationship("Case", back_populates="case_alerts")
+    alert = relationship("Alert")

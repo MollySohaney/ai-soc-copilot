@@ -7,6 +7,7 @@ AI SOC Copilot is structured to keep the Streamlit user interface isolated from 
 - `api/`: FastAPI HTTP surface exposing versioned endpoints (`/api/v1`); runs as a separate process from the Streamlit app and is not the place for business logic, which stays in `backend/`.
 - `api/schemas/`: Pydantic request/response DTOs for the HTTP API, distinct from both the Streamlit view models in `backend/models/` and the SQLAlchemy ORM models in `db/models/`.
 - `app/`: Page rendering and shared UI components only.
+- `api_client/`: Typed Python HTTP client for the SOC API, sitting between `app/` and `api/`. Framework-agnostic (no Streamlit import) and reuses `api/schemas` models directly for zero type drift; `app/components/api_state.py` is the only module allowed to bridge it into Streamlit.
 - `backend/models/`: Typed data contracts passed between services and the UI.
 - `backend/security/`: Validation and security-focused controls.
 - `backend/parsers/`: File parsing and normalization helpers.

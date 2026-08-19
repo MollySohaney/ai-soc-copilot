@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, Enum, Index, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
 from db.models.enums import CasePriorityEnum, CaseStatusEnum
@@ -41,3 +41,8 @@ class Case(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    case_alerts = relationship("CaseAlert", back_populates="case", cascade="all, delete-orphan")
+    activities = relationship(
+        "CaseActivity", cascade="all, delete-orphan", order_by="CaseActivity.created_at"
+    )

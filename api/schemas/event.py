@@ -43,3 +43,13 @@ class EventRead(EventBase):
 
     id: int
     ingested_at: datetime
+
+
+class PaginatedEvents(BaseModel):
+    """Represent a page of telemetry events."""
+
+    items: list[EventRead]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

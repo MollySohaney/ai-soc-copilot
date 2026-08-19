@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
+from api.schemas.event import EventRead
 from db.models.enums import AlertStatusEnum, SeverityEnum
 
 
@@ -43,3 +44,27 @@ class AlertRead(AlertBase):
     id: int
     created_at: datetime
     updated_at: datetime
+
+
+class AlertUpdate(BaseModel):
+    """Represent a partial update payload for an alert."""
+
+    status: AlertStatusEnum | None = None
+    risk_score: int | None = Field(default=None, ge=0, le=100)
+
+
+class PaginatedAlerts(BaseModel):
+    """Represent a page of alerts."""
+
+    items: list[AlertRead]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class AlertEventsRead(BaseModel):
+    """Represent the events linked to an alert."""
+
+    items: list[EventRead]
+    total: int
