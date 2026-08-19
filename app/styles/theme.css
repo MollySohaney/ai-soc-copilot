@@ -902,6 +902,12 @@ div[data-testid="stMetric"] {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
+.soc-status-badge.status-false-positive {
+  color: #d3d9ec;
+  background: rgba(133, 148, 189, 0.14);
+  border-color: rgba(133, 148, 189, 0.24);
+}
+
 .soc-severity-badge {
   display: inline-flex;
   align-items: center;

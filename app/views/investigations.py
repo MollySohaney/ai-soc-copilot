@@ -1,72 +1,167 @@
-"""Purpose: Render the Investigations list and case-detail workflow."""
+"""Purpose: Render the Alerts list and alert-detail workflow.
+
+Repurposes the former mock "Investigations" page to show real alerts (the
+Step 4 schema). Case management gets its own wiring in a later step; the
+Notes tab remains backed by mock data until then.
+"""
 
 from __future__ import annotations
 
 import streamlit as st
 
+from api_client import alerts as alerts_api
+from api_client.http import ApiClientError
+from db.models.enums import AlertStatusEnum, SeverityEnum
+
+from ..components import api_state
 from ..components.layout import (
+    ALERT_STATUS_DISPLAY,
+    ALERT_STATUS_FROM_DISPLAY,
     render_bullet_list,
     render_data_table,
     render_html_block,
-    render_metric_grid,
     render_timeline,
     severity_badge,
     status_badge,
 )
 from ..components.theme import render_shell_end, render_shell_start
-from ..data.mock_data import (
-    INVESTIGATION_EVIDENCE,
-    INVESTIGATION_METRICS,
-    INVESTIGATION_NOTES,
-    INVESTIGATION_OVERVIEW,
-    INVESTIGATION_TIMELINE,
-    INVESTIGATIONS,
-)
+from ..data.mock_data import INVESTIGATION_NOTES
 from config.settings import AppConfig
 
-STATUS_OPTIONS = ["New", "Investigating", "Contained", "Resolved"]
+SEVERITY_OPTIONS = ["All"] + [item.value for item in SeverityEnum]
+STATUS_OPTIONS = ["All"] + [ALERT_STATUS_DISPLAY[item] for item in AlertStatusEnum]
+PAGE_SIZE_OPTIONS = [10, 20, 50]
 
 
-def _investigation_lookup() -> dict[str, dict]:
-    return {item["id"]: item for item in INVESTIGATIONS}
+def _render_filters() -> dict:
+    col_severity, col_status, col_host, col_user = st.columns(4)
+    with col_severity:
+        severity = st.selectbox("Severity", options=SEVERITY_OPTIONS, key="alerts_filter_severity")
+    with col_status:
+        status_label = st.selectbox("Status", options=STATUS_OPTIONS, key="alerts_filter_status")
+    with col_host:
+        hostname = st.text_input("Hostname", key="alerts_filter_hostname", placeholder="e.g. prod-bastion-01")
+    with col_user:
+        username = st.text_input("Username", key="alerts_filter_username", placeholder="e.g. admin")
+
+    col_tactic, col_technique, col_page_size, _ = st.columns(4)
+    with col_tactic:
+        mitre_tactic = st.text_input("MITRE Tactic", key="alerts_filter_tactic", placeholder="e.g. Credential Access")
+    with col_technique:
+        mitre_technique_id = st.text_input("MITRE Technique ID", key="alerts_filter_technique", placeholder="e.g. T1110")
+    with col_page_size:
+        page_size = st.selectbox("Page Size", options=PAGE_SIZE_OPTIONS, index=1, key="alerts_filter_page_size")
+
+    return {
+        "severity": SeverityEnum(severity) if severity != "All" else None,
+        "status": ALERT_STATUS_FROM_DISPLAY[status_label] if status_label != "All" else None,
+        "hostname": hostname or None,
+        "username": username or None,
+        "mitre_tactic": mitre_tactic or None,
+        "mitre_technique_id": mitre_technique_id or None,
+        "page_size": page_size,
+    }
 
 
 def _render_list() -> None:
-    render_metric_grid(INVESTIGATION_METRICS, columns=4)
+    filters = _render_filters()
+
+    if st.session_state.get("alerts_page_filters") != filters:
+        st.session_state["alerts_page_filters"] = filters
+        st.session_state["alerts_page"] = 1
+
+    page = st.session_state.get("alerts_page", 1)
 
     st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
     with st.container(border=True):
-        render_html_block('<div class="soc-section-title">Open Investigations</div>')
+        render_html_block('<div class="soc-section-title">Alerts</div>')
+
+        with api_state.loading("Loading alerts..."):
+            try:
+                result = alerts_api.list_alerts(
+                    severity=filters["severity"],
+                    status=filters["status"],
+                    hostname=filters["hostname"],
+                    username=filters["username"],
+                    mitre_tactic=filters["mitre_tactic"],
+                    mitre_technique_id=filters["mitre_technique_id"],
+                    page=page,
+                    page_size=filters["page_size"],
+                    client=api_state.get_client(),
+                )
+            except ApiClientError as error:
+                api_state.render_error(error)
+                return
+
+        if not result.items:
+            api_state.render_empty_state("No alerts match the current filters.")
+            return
+
+        rows = [
+            {
+                "id": str(alert.id),
+                "title": alert.title,
+                "severity": alert.severity.value.capitalize(),
+                "status": ALERT_STATUS_DISPLAY[alert.status],
+                "hostname": alert.hostname or "—",
+                "username": alert.username or "—",
+                "created": alert.created_at.strftime("%Y-%m-%d %H:%M"),
+            }
+            for alert in result.items
+        ]
         render_data_table(
-            columns=["ID", "Investigation", "Severity", "Status", "Assignee", "Alerts", "Created", "Last Updated"],
-            rows=[{**item, "alerts": f"{item['alerts']} alerts"} for item in INVESTIGATIONS],
-            keys=["id", "title", "severity", "status", "assignee", "alerts", "created", "updated"],
+            columns=["ID", "Alert", "Severity", "Status", "Host", "User", "Created"],
+            rows=rows,
+            keys=["id", "title", "severity", "status", "hostname", "username", "created"],
             severity_key="severity",
             status_key="status",
             mono_keys=["id"],
             strong_keys=["title"],
         )
 
-    st.markdown("##### Open an investigation")
-    selected = st.selectbox(
-        "Select an investigation to view details",
-        options=[item["id"] for item in INVESTIGATIONS],
-        format_func=lambda inc_id: f"{inc_id} — {_investigation_lookup()[inc_id]['title']}",
-        key="investigation_selector",
-        label_visibility="collapsed",
-    )
-    if st.button("View Investigation", type="primary", key="open_investigation"):
-        st.session_state["selected_investigation"] = selected
+        col_prev, col_page_info, col_next = st.columns([1, 3, 1])
+        with col_prev:
+            if st.button("← Prev", key="alerts_prev_page", disabled=page <= 1):
+                st.session_state["alerts_page"] = page - 1
+                st.rerun()
+        with col_page_info:
+            st.markdown(
+                f'<div style="text-align:center; color:var(--text-secondary); padding-top:0.4rem;">'
+                f"Page {result.page} of {result.total_pages} · {result.total} alerts</div>",
+                unsafe_allow_html=True,
+            )
+        with col_next:
+            if st.button("Next →", key="alerts_next_page", disabled=page >= result.total_pages):
+                st.session_state["alerts_page"] = page + 1
+                st.rerun()
+
+        st.markdown("##### Open an alert")
+        selected = st.selectbox(
+            "Select an alert to view details",
+            options=[alert.id for alert in result.items],
+            format_func=lambda alert_id: next(
+                f"#{a.id} — {a.title}" for a in result.items if a.id == alert_id
+            ),
+            key="alert_selector",
+            label_visibility="collapsed",
+        )
+        if st.button("View Alert", type="primary", key="open_alert"):
+            st.session_state["selected_alert"] = selected
 
 
-def _render_detail(investigation_id: str) -> None:
-    case = _investigation_lookup().get(investigation_id)
-    if case is None:
-        st.session_state.pop("selected_investigation", None)
-        return
+def _render_detail(alert_id: int) -> None:
+    with api_state.loading("Loading alert..."):
+        try:
+            alert = alerts_api.get_alert(alert_id, client=api_state.get_client())
+        except ApiClientError as error:
+            if st.button("← Back to Alerts", key="back_to_alerts_error"):
+                st.session_state.pop("selected_alert", None)
+                st.rerun()
+            api_state.render_error(error)
+            return
 
-    if st.button("← Back to Investigations", key="back_to_investigations"):
-        st.session_state.pop("selected_investigation", None)
+    if st.button("← Back to Alerts", key="back_to_alerts"):
+        st.session_state.pop("selected_alert", None)
         st.rerun()
 
     render_html_block(
@@ -74,23 +169,40 @@ def _render_detail(investigation_id: str) -> None:
         <div class="soc-section-card" style="margin-top:0.9rem;">
           <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.8rem;">
             <div>
-              <div class="soc-card-label">{case['id']}</div>
-              <h3 class="soc-card-title" style="font-size:1.3rem;">{case['title']}</h3>
+              <div class="soc-card-label">#{alert.id}</div>
+              <h3 class="soc-card-title" style="font-size:1.3rem;">{alert.title}</h3>
             </div>
-            <div style="display:flex; gap:0.6rem;">{severity_badge(case['severity'])}{status_badge(case['status'])}</div>
+            <div style="display:flex; gap:0.6rem;">{severity_badge(alert.severity.value.capitalize())}{status_badge(ALERT_STATUS_DISPLAY[alert.status])}</div>
           </div>
           <div class="soc-inline-list" style="margin-top:1rem;">
-            <span><strong style="color:var(--text-primary);">Created:</strong> {case['created']}</span>
-            <span><strong style="color:var(--text-primary);">Assignee:</strong> {case['assignee']}</span>
-            <span><strong style="color:var(--text-primary);">Source:</strong> {case['source']}</span>
-            <span><strong style="color:var(--text-primary);">Affected Host:</strong> <span class="soc-mono">{case['host']}</span></span>
-            <span><strong style="color:var(--text-primary);">Affected User:</strong> <span class="soc-mono">{case['user']}</span></span>
+            <span><strong style="color:var(--text-primary);">Created:</strong> {alert.created_at.strftime('%Y-%m-%d %H:%M')}</span>
+            <span><strong style="color:var(--text-primary);">Source:</strong> {alert.source or '—'}</span>
+            <span><strong style="color:var(--text-primary);">Affected Host:</strong> <span class="soc-mono">{alert.hostname or '—'}</span></span>
+            <span><strong style="color:var(--text-primary);">Affected User:</strong> <span class="soc-mono">{alert.username or '—'}</span></span>
           </div>
         </div>
         """
     )
 
-    st.selectbox("Status", options=STATUS_OPTIONS, index=STATUS_OPTIONS.index(case["status"]), key=f"status_select_{case['id']}")
+    status_options = [ALERT_STATUS_DISPLAY[item] for item in AlertStatusEnum]
+    selected_status_label = st.selectbox(
+        "Status",
+        options=status_options,
+        index=status_options.index(ALERT_STATUS_DISPLAY[alert.status]),
+        key=f"status_select_{alert.id}",
+    )
+    if st.button("Update Status", type="primary", key=f"update_status_{alert.id}"):
+        try:
+            alerts_api.update_alert(
+                alert.id,
+                status=ALERT_STATUS_FROM_DISPLAY[selected_status_label],
+                client=api_state.get_client(),
+            )
+        except ApiClientError as error:
+            api_state.render_error(error)
+        else:
+            st.cache_data.clear()
+            st.rerun()
 
     tab_overview, tab_timeline, tab_evidence, tab_mitre, tab_notes = st.tabs(
         ["Overview", "Timeline", "Evidence", "MITRE", "Notes"]
@@ -98,30 +210,68 @@ def _render_detail(investigation_id: str) -> None:
 
     with tab_overview:
         with st.container(border=True):
-            render_html_block(f'<p class="soc-note">{INVESTIGATION_OVERVIEW}</p>')
-
-    with tab_timeline:
-        with st.container(border=True):
-            render_timeline(INVESTIGATION_TIMELINE)
-
-    with tab_evidence:
-        with st.container(border=True):
-            render_data_table(
-                columns=["Timestamp", "Event Type", "Source", "Evidence"],
-                rows=INVESTIGATION_EVIDENCE,
-                keys=["timestamp", "event_type", "source", "evidence"],
-                mono_keys=["timestamp"],
+            render_html_block(
+                f'<p class="soc-note">{alert.description or "No description recorded for this alert."}</p>'
             )
+
+    with api_state.loading("Loading alert events..."):
+        try:
+            events = alerts_api.get_alert_events(alert.id, client=api_state.get_client())
+        except ApiClientError as error:
+            with tab_timeline:
+                api_state.render_error(error)
+            with tab_evidence:
+                api_state.render_error(error)
+            events = None
+
+    if events is not None:
+        with tab_timeline:
+            with st.container(border=True):
+                if not events.items:
+                    api_state.render_empty_state("No events linked to this alert.")
+                else:
+                    timeline_items = [
+                        {
+                            "time": event.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                            "event": event.event_category or event.event_action or event.source,
+                            "detail": event.message or "",
+                        }
+                        for event in sorted(events.items, key=lambda event: event.timestamp)
+                    ]
+                    render_timeline(timeline_items)
+
+        with tab_evidence:
+            with st.container(border=True):
+                if not events.items:
+                    api_state.render_empty_state("No events linked to this alert.")
+                else:
+                    evidence_rows = [
+                        {
+                            "timestamp": event.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                            "event_type": event.event_category or "—",
+                            "source": event.source,
+                            "evidence": event.message or "—",
+                        }
+                        for event in sorted(events.items, key=lambda event: event.timestamp)
+                    ]
+                    render_data_table(
+                        columns=["Timestamp", "Event Type", "Source", "Evidence"],
+                        rows=evidence_rows,
+                        keys=["timestamp", "event_type", "source", "evidence"],
+                        mono_keys=["timestamp"],
+                    )
 
     with tab_mitre:
         with st.container(border=True):
-            render_bullet_list(
-                [
-                    "T1110 — Brute Force (Credential Access)",
-                    "T1110.001 — Password Guessing (Credential Access)",
-                    "T1078 — Valid Accounts (Persistence, Privilege Escalation)",
-                ]
-            )
+            if alert.mitre_technique_id:
+                render_bullet_list(
+                    [
+                        f"{alert.mitre_technique_id} — {alert.mitre_technique_name or 'Unknown Technique'}"
+                        f" ({alert.mitre_tactic or 'Unknown Tactic'})"
+                    ]
+                )
+            else:
+                api_state.render_empty_state("No MITRE ATT&CK mapping recorded for this alert.")
 
     with tab_notes:
         with st.container(border=True):
@@ -141,7 +291,7 @@ def _render_detail(investigation_id: str) -> None:
 
 
 def render(config: AppConfig) -> None:
-    """Render the Investigations page.
+    """Render the Investigations (Alerts) page.
 
     Args:
         config: Application configuration.
@@ -149,16 +299,12 @@ def render(config: AppConfig) -> None:
     _ = config
     render_shell_start(
         title="Investigations",
-        description="Track active security investigations and analyst workflows.",
+        description="Triage and track real-time security alerts from one workspace.",
         breadcrumb="SOC workspace / investigations",
-        status_chips=[("Open", str(len(INVESTIGATIONS)))],
+        status_chips=[],
     )
 
-    col_header, col_action = st.columns([4, 1])
-    with col_action:
-        st.button("New Investigation", type="primary", use_container_width=True, key="new_investigation_cta")
-
-    selected_id = st.session_state.get("selected_investigation")
+    selected_id = st.session_state.get("selected_alert")
     if selected_id:
         _render_detail(selected_id)
     else:

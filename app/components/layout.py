@@ -8,6 +8,18 @@ from typing import Iterable, Mapping, Sequence
 import streamlit as st
 
 from backend.models.dashboard import DashboardMetric
+from db.models.enums import AlertStatusEnum
+
+ALERT_STATUS_DISPLAY: dict[AlertStatusEnum, str] = {
+    AlertStatusEnum.NEW: "New",
+    AlertStatusEnum.IN_PROGRESS: "Investigating",
+    AlertStatusEnum.CLOSED: "Resolved",
+    AlertStatusEnum.FALSE_POSITIVE: "False Positive",
+}
+
+ALERT_STATUS_FROM_DISPLAY: dict[str, AlertStatusEnum] = {
+    label: status for status, label in ALERT_STATUS_DISPLAY.items()
+}
 
 
 def render_page_header(title: str, description: str) -> None:
