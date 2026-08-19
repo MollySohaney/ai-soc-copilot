@@ -21,6 +21,10 @@ class AppConfig(BaseModel):
     log_dir: str = Field(default="logs")
     max_upload_size_mb: int = Field(default=10)
     allowed_upload_types: list[str] = Field(default_factory=lambda: ["json", "csv", "txt"])
+    api_version: str = Field(default="v1")
+    api_host: str = Field(default="0.0.0.0")
+    api_port: int = Field(default=8000)
+    frontend_origins: list[str] = Field(default_factory=lambda: ["http://localhost:8501"])
 
     @field_validator("log_level")
     @classmethod
@@ -72,6 +76,25 @@ class AppConfig(BaseModel):
             raise ValueError("Maximum upload size must be greater than zero.")
         return value
 
+    @field_validator("frontend_origins")
+    @classmethod
+    def validate_frontend_origins(cls, value: list[str]) -> list[str]:
+        """Normalize and validate configured frontend origins.
+
+        Args:
+            value: Configured frontend origins.
+
+        Returns:
+            Normalized frontend origins.
+
+        Raises:
+            ValueError: If no origins are configured.
+        """
+        normalized = [item.strip() for item in value if item.strip()]
+        if not normalized:
+            raise ValueError("At least one frontend origin must be configured.")
+        return normalized
+
     def to_safe_dict(self) -> dict[str, str | int | bool | list[str]]:
         """Return a UI-safe configuration view.
 
@@ -91,6 +114,7 @@ def load_config() -> AppConfig:
     load_dotenv()
 
     upload_types = os.getenv("ALLOWED_UPLOAD_TYPES", "json,csv,txt")
+    frontend_origins = os.getenv("FRONTEND_ORIGIN", "http://localhost:8501")
     return AppConfig(
         app_name=os.getenv("APP_NAME", "AI SOC Copilot"),
         environment=os.getenv("APP_ENV", "development"),
@@ -101,4 +125,8 @@ def load_config() -> AppConfig:
         log_dir=os.getenv("LOG_DIR", "logs"),
         max_upload_size_mb=int(os.getenv("MAX_UPLOAD_SIZE_MB", "10")),
         allowed_upload_types=upload_types.split(","),
+        api_version=os.getenv("API_VERSION", "v1"),
+        api_host=os.getenv("API_HOST", "0.0.0.0"),
+        api_port=int(os.getenv("API_PORT", "8000")),
+        frontend_origins=frontend_origins.split(","),
     )

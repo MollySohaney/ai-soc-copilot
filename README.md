@@ -15,6 +15,7 @@ AI SOC Copilot is a production-oriented Python application scaffold for SOC anal
 ## Project Structure
 
 ```text
+api/
 app/
 backend/
 config/
@@ -39,10 +40,14 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-4. Start the Streamlit application:
+4. Start the Streamlit application and the FastAPI service as two separate local processes:
 
 ```bash
 streamlit run app/main.py
+```
+
+```bash
+uvicorn api.main:app --reload --port 8000
 ```
 
 ## Current Scope
