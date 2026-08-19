@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -53,4 +54,31 @@ def client(db_session: Session) -> Iterator[TestClient]:
     try:
         yield TestClient(app)
     finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture()
+def api_client_transport(db_session: Session) -> Iterator[httpx.Client]:
+    """Provide an httpx.Client wired straight into the seeded app, no live server.
+
+    Used to exercise api_client/ resource functions (which accept an injectable
+    `client: httpx.Client` param) against real endpoint/schema code. httpx's
+    ASGITransport only implements the async transport interface in the pinned
+    httpx==0.27.2, so it cannot back a sync httpx.Client.request() call; Starlette's
+    TestClient solves the same problem by wrapping the ASGI app in a sync-compatible
+    transport via an anyio portal, and TestClient is itself an httpx.Client
+    subclass, so it satisfies api_client's `httpx.Client` type exactly. The base_url
+    includes the `/api/v1` prefix that api_client's resource functions expect the
+    client's base_url to already carry.
+    """
+
+    def _override_get_db() -> Iterator[Session]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override_get_db
+    http_client = TestClient(app, base_url="http://testserver/api/v1")
+    try:
+        yield http_client
+    finally:
+        http_client.close()
         app.dependency_overrides.pop(get_db, None)

@@ -24,6 +24,7 @@ class AppConfig(BaseModel):
     api_version: str = Field(default="v1")
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000)
+    api_base_url: str = Field(default="http://localhost:8000")
     frontend_origins: list[str] = Field(default_factory=lambda: ["http://localhost:8501"])
     postgres_host: str = Field(default="localhost")
     postgres_port: int = Field(default=5432)
@@ -145,6 +146,7 @@ def load_config() -> AppConfig:
         api_version=os.getenv("API_VERSION", "v1"),
         api_host=os.getenv("API_HOST", "0.0.0.0"),
         api_port=int(os.getenv("API_PORT", "8000")),
+        api_base_url=os.getenv("API_BASE_URL", "http://localhost:8000"),
         frontend_origins=frontend_origins.split(","),
         postgres_host=os.getenv("POSTGRES_HOST", "localhost"),
         postgres_port=int(os.getenv("POSTGRES_PORT", "5432")),

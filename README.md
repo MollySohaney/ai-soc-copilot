@@ -52,6 +52,8 @@ streamlit run app/main.py
 uvicorn api.main:app --reload --port 8000
 ```
 
+If the FastAPI service runs on a different host or port, set `API_BASE_URL` in `.env` so the Streamlit frontend's API client (`api_client/`) can reach it — it defaults to `http://localhost:8000`.
+
 5. Start PostgreSQL (used by the persistence layer in `db/`):
 
 ```bash
