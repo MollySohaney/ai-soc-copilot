@@ -5,7 +5,10 @@
 .env.local
 .venv/
 .agents/
-.claude/
+.claude/*
+!.claude/commands/
+!.claude/commands/agents/
+!.claude/commands/agents/git-setup.md
 __pycache__/
 *.py[cod]
 *.egg-info/
