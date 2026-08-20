@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,13 @@ from db.models import (
 def session() -> Iterator[Session]:
     """Provide a Session backed by a fresh in-memory SQLite database."""
     engine = create_engine("sqlite:///:memory:")
+
+    @event.listens_for(engine, "connect")
+    def _enable_foreign_keys(dbapi_connection, connection_record) -> None:  # noqa: ANN001
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     Base.metadata.create_all(engine)
     with Session(engine) as db_session:
         yield db_session
@@ -158,3 +165,67 @@ def test_alert_default_status(session: Session) -> None:
 
     fetched = session.query(Alert).filter_by(title="Default status check").one()
     assert fetched.status == AlertStatusEnum.NEW
+
+
+def test_duplicate_alert_external_id_rejected(session: Session) -> None:
+    """Two alerts sharing the same external_id violate the unique constraint."""
+    session.add(
+        Alert(title="First alert", severity=SeverityEnum.LOW, external_id="ALERT-DUP-001")
+    )
+    session.commit()
+
+    session.add(
+        Alert(title="Second alert", severity=SeverityEnum.LOW, external_id="ALERT-DUP-001")
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()
+
+
+def test_duplicate_event_event_id_rejected(session: Session) -> None:
+    """Two events sharing the same event_id violate the unique constraint."""
+    session.add(_make_event("evt-dup-1"))
+    session.commit()
+
+    session.add(_make_event("evt-dup-1"))
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()
+
+
+def test_duplicate_detection_rule_name_rejected_at_db_layer(session: Session) -> None:
+    """Two detection rules sharing the same name violate the unique constraint, at the DB layer directly."""
+    session.add(
+        DetectionRule(
+            name="Duplicate rule name",
+            query="SELECT 1",
+            severity=SeverityEnum.LOW,
+        )
+    )
+    session.commit()
+
+    session.add(
+        DetectionRule(
+            name="Duplicate rule name",
+            query="SELECT 2",
+            severity=SeverityEnum.HIGH,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()
+
+
+def test_case_activity_nonexistent_case_id_rejected(session: Session) -> None:
+    """A CaseActivity referencing a nonexistent case_id violates the foreign key constraint."""
+    session.add(
+        CaseActivity(
+            case_id=99999,
+            activity_type="note",
+            message="Orphaned activity",
+            author="analyst@example.com",
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 from db.base import Base
@@ -18,6 +18,13 @@ from db.seed import seed
 def session() -> Iterator[Session]:
     """Provide a Session backed by a fresh in-memory SQLite database."""
     engine = create_engine("sqlite:///:memory:")
+
+    @event.listens_for(engine, "connect")
+    def _enable_foreign_keys(dbapi_connection, connection_record) -> None:  # noqa: ANN001
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     Base.metadata.create_all(engine)
     with Session(engine) as db_session:
         yield db_session
