@@ -8,7 +8,7 @@ from typing import Iterable, Mapping, Sequence
 import streamlit as st
 
 from backend.models.dashboard import DashboardMetric
-from db.models.enums import AlertStatusEnum
+from db.models.enums import AlertStatusEnum, CaseStatusEnum
 
 ALERT_STATUS_DISPLAY: dict[AlertStatusEnum, str] = {
     AlertStatusEnum.NEW: "New",
@@ -19,6 +19,21 @@ ALERT_STATUS_DISPLAY: dict[AlertStatusEnum, str] = {
 
 ALERT_STATUS_FROM_DISPLAY: dict[str, AlertStatusEnum] = {
     label: status for status, label in ALERT_STATUS_DISPLAY.items()
+}
+
+# "Investigating" and "Resolved" reuse the alert status labels (and thus their
+# CSS classes) directly. "Open" and "Closed" get their own additive
+# `.status-open` / `.status-closed` classes in theme.css so the badge slug
+# (derived from the label) stays unique per case status.
+CASE_STATUS_DISPLAY: dict[CaseStatusEnum, str] = {
+    CaseStatusEnum.OPEN: "Open",
+    CaseStatusEnum.IN_PROGRESS: "Investigating",
+    CaseStatusEnum.RESOLVED: "Resolved",
+    CaseStatusEnum.CLOSED: "Closed",
+}
+
+CASE_STATUS_FROM_DISPLAY: dict[str, CaseStatusEnum] = {
+    label: status for status, label in CASE_STATUS_DISPLAY.items()
 }
 
 

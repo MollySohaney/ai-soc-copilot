@@ -48,7 +48,7 @@ def loading(message: str = "Loading...") -> Iterator[None]:
         yield
 
 
-def render_empty_state(message: str, *, icon: str = "info") -> None:
+def render_empty_state(message: str, *, icon: str = "ℹ️") -> None:
     """Render a placeholder for a successful call that returned no data.
 
     Args:
