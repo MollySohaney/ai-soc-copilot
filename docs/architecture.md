@@ -29,6 +29,10 @@ alembic downgrade -1      # roll back one migration, if needed
 
 Connection settings are read from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` (see `.env.example`), assembled into `config.settings.AppConfig.database_url`. Both `db/session.py` and `alembic/env.py` build their connection from this same setting, so application code and migrations never drift apart.
 
+## Phase 2 API Surface
+
+Phase 2's API surface (`api/v1/endpoints/`, covering events, alerts, cases, dashboard, and detection rules) is backed by PostgreSQL via `db/`, and the Streamlit frontend consumes it through the typed `api_client/` HTTP client rather than talking to the database directly.
+
 ## Design Principles
 
 - UI should never contain parsing or validation logic.
