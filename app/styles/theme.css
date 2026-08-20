@@ -908,6 +908,30 @@ div[data-testid="stMetric"] {
   border-color: rgba(133, 148, 189, 0.24);
 }
 
+.soc-status-badge.status-open {
+  color: #c3d3ff;
+  background: rgba(91, 124, 255, 0.14);
+  border-color: rgba(112, 149, 255, 0.24);
+}
+
+.soc-status-badge.status-closed {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.soc-status-badge.status-enabled {
+  color: #c6ffe6;
+  background: rgba(54, 211, 153, 0.1);
+  border-color: rgba(54, 211, 153, 0.2);
+}
+
+.soc-status-badge.status-disabled {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
 .soc-severity-badge {
   display: inline-flex;
   align-items: center;

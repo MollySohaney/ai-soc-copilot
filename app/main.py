@@ -18,11 +18,13 @@ from app.components.copilot import render_copilot_panel
 from app.components.theme import apply_theme, render_sidebar_brand, render_sidebar_status
 from app.views import (
     analyze_alert,
+    cases,
     dashboard,
     integrations,
     investigations,
     mitre_explorer,
     reports,
+    rules,
     settings,
     threat_intel,
 )
@@ -90,11 +92,23 @@ def build_navigation() -> dict[str, NavigationItem]:
             icon="▤",
             renderer=investigations.render,
         ),
+        "Cases": NavigationItem(
+            key="cases",
+            label="Cases",
+            icon="🗂",
+            renderer=cases.render,
+        ),
         "MITRE ATT&CK": NavigationItem(
             key="mitre_explorer",
             label="MITRE ATT&CK",
             icon="◈",
             renderer=mitre_explorer.render,
+        ),
+        "Detection Rules": NavigationItem(
+            key="rules",
+            label="Detection Rules",
+            icon="◆",
+            renderer=rules.render,
         ),
         "Threat Intelligence": NavigationItem(
             key="threat_intel",
@@ -137,7 +151,9 @@ def render_sidebar_navigation(navigation: dict[str, NavigationItem]) -> str:
         "Dashboard",
         "Analyze Alert",
         "Investigations",
+        "Cases",
         "MITRE ATT&CK",
+        "Detection Rules",
         "Threat Intelligence",
         "Reports",
     ]

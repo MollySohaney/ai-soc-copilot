@@ -10,6 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from api_client import alerts as alerts_api
+from api_client import cases as cases_api
 from api_client.http import ApiClientError
 from db.models.enums import AlertStatusEnum, SeverityEnum
 
@@ -184,25 +185,45 @@ def _render_detail(alert_id: int) -> None:
         """
     )
 
-    status_options = [ALERT_STATUS_DISPLAY[item] for item in AlertStatusEnum]
-    selected_status_label = st.selectbox(
-        "Status",
-        options=status_options,
-        index=status_options.index(ALERT_STATUS_DISPLAY[alert.status]),
-        key=f"status_select_{alert.id}",
-    )
-    if st.button("Update Status", type="primary", key=f"update_status_{alert.id}"):
-        try:
-            alerts_api.update_alert(
-                alert.id,
-                status=ALERT_STATUS_FROM_DISPLAY[selected_status_label],
-                client=api_state.get_client(),
-            )
-        except ApiClientError as error:
-            api_state.render_error(error)
-        else:
-            st.cache_data.clear()
-            st.rerun()
+    col_status, col_escalate = st.columns([3, 1])
+    with col_status:
+        status_options = [ALERT_STATUS_DISPLAY[item] for item in AlertStatusEnum]
+        selected_status_label = st.selectbox(
+            "Status",
+            options=status_options,
+            index=status_options.index(ALERT_STATUS_DISPLAY[alert.status]),
+            key=f"status_select_{alert.id}",
+        )
+        if st.button("Update Status", type="primary", key=f"update_status_{alert.id}"):
+            try:
+                alerts_api.update_alert(
+                    alert.id,
+                    status=ALERT_STATUS_FROM_DISPLAY[selected_status_label],
+                    client=api_state.get_client(),
+                )
+            except ApiClientError as error:
+                api_state.render_error(error)
+            else:
+                st.cache_data.clear()
+                st.rerun()
+    with col_escalate:
+        st.markdown('<div style="margin-top:1.75rem;"></div>', unsafe_allow_html=True)
+        if st.button("Escalate to Case", key=f"escalate_to_case_{alert.id}"):
+            try:
+                new_case = cases_api.create_case(
+                    title=f"Investigate: {alert.title}",
+                    alert_ids=[alert.id],
+                    client=api_state.get_client(),
+                )
+            except ApiClientError as error:
+                api_state.render_error(error)
+            else:
+                st.cache_data.clear()
+                st.session_state.pop("selected_alert", None)
+                st.session_state["selected_case"] = new_case.id
+                st.session_state["selected_page"] = "Cases"
+                st.success(f"Created case {new_case.case_number}. Opening in Cases…")
+                st.rerun()
 
     tab_overview, tab_timeline, tab_evidence, tab_mitre, tab_notes = st.tabs(
         ["Overview", "Timeline", "Evidence", "MITRE", "Notes"]
