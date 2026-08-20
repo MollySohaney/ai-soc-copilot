@@ -10,6 +10,7 @@ from db.models.case import Case
 from db.models.case_alert import CaseAlert
 
 NONEXISTENT_ID = 99999
+SEEDED_CASE_COUNT = 3
 
 
 def _case_id(db_session: Session, case_number: str) -> int:
@@ -26,6 +27,81 @@ def _case_alert_count(db_session: Session, case_id: int) -> int:
 
 def _case_count(db_session: Session) -> int:
     return db_session.query(Case).count()
+
+
+# --- Listing / pagination / filters ---------------------------------------
+
+
+def test_list_cases_default_page_shape(client: TestClient) -> None:
+    """The default listing returns every seeded case on a single page."""
+    response = client.get("/api/v1/cases")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == SEEDED_CASE_COUNT
+    assert body["page"] == 1
+    assert body["page_size"] == 20
+    assert body["total_pages"] == 1
+    assert len(body["items"]) == SEEDED_CASE_COUNT
+
+
+def test_list_cases_pagination_returns_disjoint_stable_slices(client: TestClient) -> None:
+    """page=2&page_size=1 returns a different, stably-ordered slice than page 1."""
+    page1 = client.get("/api/v1/cases", params={"page": 1, "page_size": 1}).json()
+    page2 = client.get("/api/v1/cases", params={"page": 2, "page_size": 1}).json()
+
+    assert page1["total"] == SEEDED_CASE_COUNT
+    assert page1["total_pages"] == SEEDED_CASE_COUNT
+    assert len(page1["items"]) == 1
+    assert len(page2["items"]) == 1
+
+    ids_page1 = {item["id"] for item in page1["items"]}
+    ids_page2 = {item["id"] for item in page2["items"]}
+    assert ids_page1.isdisjoint(ids_page2)
+
+    # Re-querying page 1 returns the exact same ordering (stable sort).
+    page1_again = client.get("/api/v1/cases", params={"page": 1, "page_size": 1}).json()
+    assert [item["id"] for item in page1["items"]] == [item["id"] for item in page1_again["items"]]
+
+
+def test_list_cases_oversized_page_size_is_rejected(client: TestClient) -> None:
+    """A page_size above the allowed maximum of 100 is rejected with 422."""
+    response = client.get("/api/v1/cases", params={"page_size": 101})
+
+    assert response.status_code == 422
+
+
+def test_filter_cases_by_status(client: TestClient) -> None:
+    """Filtering by status=resolved returns only the seeded resolved case."""
+    response = client.get("/api/v1/cases", params={"status": "resolved"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["case_number"] == "CASE-2026-0002"
+    assert all(item["status"] == "resolved" for item in body["items"])
+
+
+def test_filter_cases_by_priority(client: TestClient) -> None:
+    """Filtering by priority=critical returns only the seeded critical case."""
+    response = client.get("/api/v1/cases", params={"priority": "critical"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["case_number"] == "CASE-2026-0001"
+    assert all(item["priority"] == "critical" for item in body["items"])
+
+
+def test_filter_cases_by_assignee(client: TestClient) -> None:
+    """Filtering by assignee matches the seeded case assigned to that analyst, case-insensitively."""
+    response = client.get("/api/v1/cases", params={"assignee": "Analyst.Rivera"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["case_number"] == "CASE-2026-0001"
+    assert all(item["assignee"] == "analyst.rivera" for item in body["items"])
 
 
 # --- Case creation -----------------------------------------------------
