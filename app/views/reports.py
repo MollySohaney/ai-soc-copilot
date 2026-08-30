@@ -93,7 +93,7 @@ def render(config: AppConfig) -> None:
         title="Incident Reports",
         description="Review and export security investigation reports.",
         breadcrumb="SOC workspace / reports",
-        status_chips=[("Export target", "Local only")],
+        status_chips=[("Data source", "Mock/demo data"), ("Export target", "Local only")],
     )
 
     col_header, col_action = st.columns([4, 1])

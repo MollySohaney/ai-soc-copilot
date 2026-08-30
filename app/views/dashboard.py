@@ -207,7 +207,10 @@ def _render_severity_distribution() -> None:
 
 
 def _render_mitre_activity() -> None:
-    render_html_block('<div class="soc-card-label">MITRE ACTIVITY</div><h3 class="soc-card-title">Top Observed Techniques</h3>')
+    render_html_block(
+        '<div class="soc-card-label">MITRE ACTIVITY · MOCK/DEMO DATA</div>'
+        '<h3 class="soc-card-title">Top Observed Techniques</h3>'
+    )
     max_count = max(item["count"] for item in MITRE_ACTIVITY)
     rows = "".join(
         f"""

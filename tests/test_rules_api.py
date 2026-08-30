@@ -158,6 +158,15 @@ def test_patch_rule_invalid_data_is_rejected(
     assert response.status_code == 422
 
 
+def test_patch_rule_null_query_is_rejected(client: TestClient, db_session: Session) -> None:
+    """PATCHing a non-nullable rule field to null returns 422."""
+    rule_id = _rule_id(db_session, "Unusual Outbound Network Connection Volume")
+
+    response = client.patch(f"/api/v1/rules/{rule_id}", json={"query": None})
+
+    assert response.status_code == 422
+
+
 def test_patch_rule_not_found(client: TestClient) -> None:
     """PATCHing a nonexistent rule id returns 404."""
     response = client.patch(f"/api/v1/rules/{NONEXISTENT_ID}", json={"enabled": False})

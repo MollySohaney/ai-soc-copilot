@@ -49,7 +49,7 @@ def render_copilot_panel() -> None:
     with st.container(key="copilot_panel"):
         render_html_block(
             """
-            <div class="soc-card-label">SOC ASSISTANT</div>
+            <div class="soc-card-label">SOC ASSISTANT · MOCK MODE</div>
             <h3 class="soc-card-title" style="font-size:1.15rem;">SOC Copilot</h3>
             <p class="soc-card-subtitle">Ask about the current alert or investigation.</p>
             <div style="height:1px; background:rgba(133,164,255,0.14); margin:0.9rem 0;"></div>
