@@ -25,3 +25,30 @@ def test_safe_config_redacts_postgres_password() -> None:
 
     assert safe_config["postgres_password"] == "[redacted]"
     assert "super-secret" not in safe_config.values()
+
+
+def test_safe_config_redacts_elastic_credentials() -> None:
+    """Ensure UI-facing runtime config does not expose Elastic credentials."""
+    config = AppConfig(
+        elastic_api_key="elastic-api-secret",
+        elastic_username="elastic-user",
+        elastic_password="elastic-password-secret",
+    )
+
+    safe_config = config.to_safe_dict()
+
+    assert safe_config["elastic_username"] == "elastic-user"
+    assert safe_config["elastic_api_key"] == "[redacted]"
+    assert safe_config["elastic_password"] == "[redacted]"
+    assert "elastic-api-secret" not in safe_config.values()
+    assert "elastic-password-secret" not in safe_config.values()
+
+
+def test_config_rejects_non_positive_elastic_timeout() -> None:
+    """Elastic request timeouts must be positive."""
+    try:
+        AppConfig(elastic_request_timeout_seconds=0)
+    except ValueError as error:
+        assert "Elastic request timeout" in str(error)
+    else:
+        raise AssertionError("Expected AppConfig to reject a zero Elastic timeout.")

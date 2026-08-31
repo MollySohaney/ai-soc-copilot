@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from backend.ingestion.adapters import FixtureIngestionAdapter, IngestionAdapter
+from backend.ingestion.adapters import (
+    ElasticIngestionAdapter,
+    FixtureIngestionAdapter,
+    IngestionAdapter,
+)
 from backend.ingestion.dto import (
     AdapterHealth,
     IngestionCheckpointState,
@@ -10,13 +14,26 @@ from backend.ingestion.dto import (
     IngestionPage,
     SourceRecord,
 )
+from backend.ingestion.errors import (
+    IngestionAdapterError,
+    IngestionAuthenticationError,
+    IngestionConfigurationError,
+    IngestionConnectionError,
+    IngestionTimeoutError,
+)
 
 __all__ = [
     "AdapterHealth",
+    "ElasticIngestionAdapter",
     "FixtureIngestionAdapter",
     "IngestionAdapter",
     "IngestionCheckpointState",
     "IngestionFetchRequest",
     "IngestionPage",
     "SourceRecord",
+    "IngestionAdapterError",
+    "IngestionAuthenticationError",
+    "IngestionConfigurationError",
+    "IngestionConnectionError",
+    "IngestionTimeoutError",
 ]
