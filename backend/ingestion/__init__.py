@@ -21,6 +21,11 @@ from backend.ingestion.errors import (
     IngestionConnectionError,
     IngestionTimeoutError,
 )
+from backend.ingestion.normalizers import (
+    NORMALIZATION_VERSION,
+    EcsEventNormalizer,
+    NormalizedEvent,
+)
 
 __all__ = [
     "AdapterHealth",
@@ -36,4 +41,7 @@ __all__ = [
     "IngestionConfigurationError",
     "IngestionConnectionError",
     "IngestionTimeoutError",
+    "EcsEventNormalizer",
+    "NormalizedEvent",
+    "NORMALIZATION_VERSION",
 ]
