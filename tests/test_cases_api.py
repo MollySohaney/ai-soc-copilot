@@ -254,6 +254,15 @@ def test_update_case_invalid_priority_returns_422(
     assert response.status_code == 422
 
 
+def test_update_case_null_title_is_rejected(client: TestClient, db_session: Session) -> None:
+    """PATCHing a non-nullable case field to null returns 422."""
+    case_id = _case_id(db_session, "CASE-2026-0003")
+
+    response = client.patch(f"/api/v1/cases/{case_id}", json={"title": None})
+
+    assert response.status_code == 422
+
+
 def test_update_case_not_found(client: TestClient) -> None:
     """PATCHing a nonexistent case id returns 404."""
     response = client.patch(f"/api/v1/cases/{NONEXISTENT_ID}", json={"status": "closed"})

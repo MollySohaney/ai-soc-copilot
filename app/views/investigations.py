@@ -296,6 +296,7 @@ def _render_detail(alert_id: int) -> None:
 
     with tab_notes:
         with st.container(border=True):
+            render_html_block('<div class="soc-card-label">NOTES · MOCK/DEMO DATA</div>')
             for note in INVESTIGATION_NOTES:
                 render_html_block(
                     f"""

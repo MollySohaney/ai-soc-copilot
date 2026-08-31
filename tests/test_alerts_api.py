@@ -226,6 +226,15 @@ def test_update_alert_status_invalid_value_is_rejected(
     assert response.status_code == 422
 
 
+def test_update_alert_null_status_is_rejected(client: TestClient, db_session: Session) -> None:
+    """PATCHing a non-nullable alert field to null returns 422."""
+    alert_id = _alert_id(db_session, "ALERT-1003")
+
+    response = client.patch(f"/api/v1/alerts/{alert_id}", json={"status": None})
+
+    assert response.status_code == 422
+
+
 def test_update_alert_not_found(client: TestClient) -> None:
     """PATCHing a nonexistent alert id returns 404."""
     response = client.patch(f"/api/v1/alerts/{NONEXISTENT_ID}", json={"status": "closed"})

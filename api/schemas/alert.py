@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.schemas.event import EventRead
 from db.models.enums import AlertStatusEnum, SeverityEnum
@@ -51,6 +53,14 @@ class AlertUpdate(BaseModel):
 
     status: AlertStatusEnum | None = None
     risk_score: int | None = Field(default=None, ge=0, le=100)
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_null_non_nullable_fields(cls, data: Any) -> Any:
+        """Reject explicit nulls for alert fields that cannot be cleared."""
+        if isinstance(data, dict) and data.get("status") is None and "status" in data:
+            raise ValueError("status cannot be null")
+        return data
 
 
 class PaginatedAlerts(BaseModel):

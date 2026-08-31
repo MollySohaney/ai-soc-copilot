@@ -21,7 +21,7 @@ def render(config: AppConfig) -> None:
         title="Integrations",
         description="Connect security platforms and threat intelligence services.",
         breadcrumb="SOC workspace / integrations",
-        status_chips=[("Connected", "0")],
+        status_chips=[("Data source", "Mock/demo data"), ("Connected", "0")],
     )
 
     with st.container(border=True):

@@ -15,3 +15,13 @@ def test_config_normalizes_log_level() -> None:
     config = AppConfig(log_level="debug")
 
     assert config.log_level == "DEBUG"
+
+
+def test_safe_config_redacts_postgres_password() -> None:
+    """Ensure UI-facing runtime config does not expose the database password."""
+    config = AppConfig(postgres_password="super-secret")
+
+    safe_config = config.to_safe_dict()
+
+    assert safe_config["postgres_password"] == "[redacted]"
+    assert "super-secret" not in safe_config.values()

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from db.models.enums import SeverityEnum
 
@@ -116,6 +116,20 @@ class DetectionRuleUpdate(BaseModel):
     _validate_mitre_technique_id = field_validator("mitre_technique_id")(
         _validate_mitre_technique_id
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_null_non_nullable_fields(cls, data: Any) -> Any:
+        """Reject explicit nulls for rule fields that cannot be cleared."""
+        if isinstance(data, dict):
+            null_fields = sorted(
+                field
+                for field in ("name", "query", "severity", "enabled")
+                if field in data and data[field] is None
+            )
+            if null_fields:
+                raise ValueError(f"{', '.join(null_fields)} cannot be null")
+        return data
 
 
 class DetectionRuleRead(DetectionRuleBase):

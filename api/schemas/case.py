@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.schemas.alert import AlertRead
 from api.schemas.case_activity import CaseActivityRead
@@ -56,6 +57,18 @@ class CaseUpdate(BaseModel):
     status: CaseStatusEnum | None = None
     priority: CasePriorityEnum | None = None
     assignee: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_null_non_nullable_fields(cls, data: Any) -> Any:
+        """Reject explicit nulls for case fields that cannot be cleared."""
+        if isinstance(data, dict):
+            null_fields = sorted(
+                field for field in ("title", "status", "priority") if field in data and data[field] is None
+            )
+            if null_fields:
+                raise ValueError(f"{', '.join(null_fields)} cannot be null")
+        return data
 
 
 class CaseDetail(CaseRead):

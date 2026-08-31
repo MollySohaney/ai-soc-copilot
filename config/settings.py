@@ -119,7 +119,9 @@ class AppConfig(BaseModel):
         Returns:
             Sanitized configuration data for display.
         """
-        return self.model_dump()
+        safe_config = self.model_dump(exclude={"postgres_password"})
+        safe_config["postgres_password"] = "[redacted]"
+        return safe_config
 
 
 @lru_cache(maxsize=1)
