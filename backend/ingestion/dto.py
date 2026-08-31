@@ -76,3 +76,21 @@ class IngestionPage(BaseModel):
         if value != sorted_records:
             raise ValueError("records must be sorted by timestamp and record_id.")
         return value
+
+
+class IngestionRunResult(BaseModel):
+    """Represent the outcome of one orchestrated ingestion run."""
+
+    run_id: int
+    provider: str
+    source_name: str
+    status: str
+    dry_run: bool = False
+    fetched_count: int = 0
+    normalized_count: int = 0
+    persisted_count: int = 0
+    duplicate_count: int = 0
+    failed_count: int = 0
+    warning_count: int = 0
+    checkpoint_advanced: bool = False
+    errors: list[str] = Field(default_factory=list)
