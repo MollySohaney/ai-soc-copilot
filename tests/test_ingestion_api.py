@@ -164,3 +164,19 @@ def test_sync_requires_valid_time_window(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_sync_enforces_configured_ingestion_limit(client: TestClient) -> None:
+    """Manual sync requests cannot exceed the configured ingestion limit."""
+
+    def _config_override() -> AppConfig:
+        return AppConfig(max_ingestion_sync_limit=2)
+
+    app.dependency_overrides[load_config] = _config_override
+    try:
+        response = client.post("/api/v1/ingestion/fixture/sync", json=SYNC_BODY)
+    finally:
+        app.dependency_overrides.pop(load_config, None)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "limit must be less than or equal to 2"

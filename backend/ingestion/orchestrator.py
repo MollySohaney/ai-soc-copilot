@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from time import sleep as default_sleep
 from typing import Protocol
 
 from sqlalchemy import select
@@ -15,7 +16,9 @@ from backend.ingestion.dto import (
     IngestionFetchRequest,
     IngestionRunResult,
 )
+from backend.ingestion.errors import IngestionConnectionError, IngestionTimeoutError
 from backend.ingestion.normalizers import EcsEventNormalizer, NormalizedEvent
+from backend.utils.logging import get_logger
 from db.models import Event, IngestionCheckpoint, IngestionRun
 
 
@@ -34,11 +37,18 @@ class IngestionOrchestrator:
         session: Session,
         adapter: IngestionAdapter,
         normalizer: EventNormalizer | None = None,
+        retry_attempts: int = 1,
+        retry_backoff_seconds: float = 0.0,
+        sleeper=default_sleep,  # noqa: ANN001
     ) -> None:
         """Initialize the orchestrator with explicit dependencies."""
         self._session = session
         self._adapter = adapter
         self._normalizer = normalizer or EcsEventNormalizer()
+        self._retry_attempts = max(1, retry_attempts)
+        self._retry_backoff_seconds = max(0.0, retry_backoff_seconds)
+        self._sleeper = sleeper
+        self._logger = get_logger(__name__)
 
     def run(self, request: IngestionFetchRequest, *, dry_run: bool = False) -> IngestionRunResult:
         """Run one bounded ingestion page and advance checkpoint after persistence."""
@@ -54,11 +64,21 @@ class IngestionOrchestrator:
         )
         self._session.add(run)
         self._session.flush()
+        self._logger.info(
+            "Ingestion run started",
+            extra={
+                "provider": self._adapter.provider,
+                "source_name": self._adapter.source_name,
+                "run_id": run.id,
+                "dry_run": dry_run,
+                "limit": request.limit,
+            },
+        )
 
         errors: list[str] = []
         checkpoint_advanced = False
         try:
-            page = self._adapter.fetch_records(effective_request)
+            page = self._fetch_with_retries(effective_request, run)
             run.fetched_count = len(page.records)
             normalized_events = self._normalize_records(page.records, run, errors)
             duplicate_keys = self._existing_dedup_keys(normalized_events)
@@ -94,9 +114,34 @@ class IngestionOrchestrator:
             )
             run.completed_at = datetime.now(timezone.utc)
             self._session.commit()
+            self._logger.info(
+                "Ingestion run completed",
+                extra={
+                    "provider": run.provider,
+                    "source_name": run.source_name,
+                    "run_id": run.id,
+                    "status": run.status,
+                    "fetched_count": run.fetched_count,
+                    "normalized_count": run.normalized_count,
+                    "persisted_count": run.persisted_count,
+                    "duplicate_count": run.duplicate_count,
+                    "failed_count": run.failed_count,
+                    "warning_count": run.warning_count,
+                    "checkpoint_advanced": checkpoint_advanced,
+                },
+            )
         except Exception as error:  # noqa: BLE001
             self._session.rollback()
             self._record_failed_run(run, request, checkpoint, error)
+            self._logger.error(
+                "Ingestion run failed",
+                extra={
+                    "provider": self._adapter.provider,
+                    "source_name": self._adapter.source_name,
+                    "run_id": run.id,
+                    "error_type": type(error).__name__,
+                },
+            )
             raise
 
         return IngestionRunResult(
@@ -114,6 +159,29 @@ class IngestionOrchestrator:
             checkpoint_advanced=checkpoint_advanced,
             errors=errors,
         )
+
+    def _fetch_with_retries(
+        self, request: IngestionFetchRequest, run: IngestionRun
+    ):
+        for attempt in range(1, self._retry_attempts + 1):
+            try:
+                return self._adapter.fetch_records(request)
+            except (IngestionConnectionError, IngestionTimeoutError) as error:
+                if attempt == self._retry_attempts:
+                    raise
+                self._logger.warning(
+                    "Ingestion fetch retry scheduled",
+                    extra={
+                        "provider": self._adapter.provider,
+                        "source_name": self._adapter.source_name,
+                        "run_id": run.id,
+                        "attempt": attempt,
+                        "max_attempts": self._retry_attempts,
+                        "error_type": type(error).__name__,
+                    },
+                )
+                self._sleeper(self._retry_backoff_seconds * attempt)
+        raise RuntimeError("Ingestion fetch retry loop exited unexpectedly.")
 
     def _load_checkpoint(self) -> IngestionCheckpointState | None:
         checkpoint = self._session.scalar(

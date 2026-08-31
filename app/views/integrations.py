@@ -50,7 +50,7 @@ def render(config: AppConfig) -> None:
         status_chips=[("Data source", "API-backed ingestion"), ("Connected", connected_count)],
     )
 
-    _render_ingestion_controls()
+    _render_ingestion_controls(config)
     st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
     _render_ingestion_status()
     st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
@@ -90,7 +90,7 @@ def render(config: AppConfig) -> None:
     render_shell_end()
 
 
-def _render_ingestion_controls() -> None:
+def _render_ingestion_controls(config: AppConfig) -> None:
     with st.container(border=True):
         render_html_block('<div class="soc-section-title">Telemetry ingestion</div>')
         provider = st.segmented_control(
@@ -112,7 +112,13 @@ def _render_ingestion_controls() -> None:
         with st.form("manual_ingestion_sync", border=False):
             start_time = st.text_input("Start time", value=DEFAULT_START)
             end_time = st.text_input("End time", value=DEFAULT_END)
-            limit = st.number_input("Record limit", min_value=1, max_value=1000, value=100, step=25)
+            limit = st.number_input(
+                "Record limit",
+                min_value=1,
+                max_value=config.max_ingestion_sync_limit,
+                value=min(100, config.max_ingestion_sync_limit),
+                step=25,
+            )
             dry_run = st.toggle("Dry run", value=True)
             submitted = st.form_submit_button("Run bounded sync", icon=":material/sync:")
 

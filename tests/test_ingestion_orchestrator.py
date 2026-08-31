@@ -17,6 +17,7 @@ from backend.ingestion import (
     IngestionOrchestrator,
 )
 from backend.ingestion.dto import SourceRecord
+from backend.ingestion.errors import IngestionTimeoutError
 from backend.ingestion.normalizers import EcsEventNormalizer
 from db.base import Base
 from db.models import Event, IngestionCheckpoint, IngestionRun
@@ -52,6 +53,20 @@ class FailingNormalizer(EcsEventNormalizer):
         if record.record_id in self._failing_record_ids:
             raise ValueError("fixture normalization failed")
         return super().normalize(record)
+
+
+class FlakyFixtureAdapter(FixtureIngestionAdapter):
+    """Fail transiently before returning fixture records."""
+
+    def __init__(self) -> None:
+        super().__init__(source_name="fixture-flaky")
+        self.calls = 0
+
+    def fetch_records(self, request: IngestionFetchRequest):
+        self.calls += 1
+        if self.calls == 1:
+            raise IngestionTimeoutError("temporary timeout")
+        return super().fetch_records(request)
 
 
 def test_orchestrator_persists_events_and_advances_checkpoint(session: Session) -> None:
@@ -177,6 +192,41 @@ def test_orchestrator_does_not_advance_checkpoint_on_transaction_failure(
 
     assert session.scalar(select(func.count()).select_from(Event)) == 0
     assert session.scalar(select(func.count()).select_from(IngestionCheckpoint)) == 0
+
+
+def test_orchestrator_retries_transient_fetch_failures(session: Session) -> None:
+    """Transient provider fetch failures are retried with bounded backoff."""
+    adapter = FlakyFixtureAdapter()
+    sleeps: list[float] = []
+
+    result = IngestionOrchestrator(
+        session,
+        adapter,
+        retry_attempts=2,
+        retry_backoff_seconds=0.25,
+        sleeper=sleeps.append,
+    ).run(_request(limit=1))
+
+    assert adapter.calls == 2
+    assert sleeps == [0.25]
+    assert result.persisted_count == 1
+
+
+def test_orchestrator_logs_sanitized_run_context(
+    session: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Ingestion logs include metrics but not raw source payload values."""
+    adapter = FixtureIngestionAdapter(source_name="fixture-log")
+
+    with caplog.at_level("INFO"):
+        IngestionOrchestrator(session, adapter).run(_request(limit=1))
+
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    context = "\n".join(str(record.__dict__) for record in caplog.records)
+    assert "Ingestion run started" in messages
+    assert "Ingestion run completed" in messages
+    assert "fixture-log" in context
+    assert "Failed password" not in context
 
 
 def _request(

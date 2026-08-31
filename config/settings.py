@@ -39,6 +39,9 @@ class AppConfig(BaseModel):
     elastic_password: str | None = Field(default=None)
     elastic_request_timeout_seconds: int = Field(default=10)
     elastic_verify_certs: bool = Field(default=True)
+    max_ingestion_sync_limit: int = Field(default=1000)
+    ingestion_retry_attempts: int = Field(default=3)
+    ingestion_retry_backoff_seconds: float = Field(default=0.5)
 
     @property
     def database_url(self) -> str:
@@ -108,6 +111,30 @@ class AppConfig(BaseModel):
         """Ensure Elastic requests use a positive timeout."""
         if value <= 0:
             raise ValueError("Elastic request timeout must be greater than zero.")
+        return value
+
+    @field_validator("max_ingestion_sync_limit")
+    @classmethod
+    def validate_ingestion_limit(cls, value: int) -> int:
+        """Ensure manual ingestion sync limits are positive."""
+        if value <= 0:
+            raise ValueError("Maximum ingestion sync limit must be greater than zero.")
+        return value
+
+    @field_validator("ingestion_retry_attempts")
+    @classmethod
+    def validate_ingestion_retry_attempts(cls, value: int) -> int:
+        """Ensure ingestion retry attempts are positive."""
+        if value <= 0:
+            raise ValueError("Ingestion retry attempts must be greater than zero.")
+        return value
+
+    @field_validator("ingestion_retry_backoff_seconds")
+    @classmethod
+    def validate_ingestion_retry_backoff(cls, value: float) -> float:
+        """Ensure ingestion retry backoff is not negative."""
+        if value < 0:
+            raise ValueError("Ingestion retry backoff must not be negative.")
         return value
 
     @field_validator("frontend_origins")
@@ -183,4 +210,7 @@ def load_config() -> AppConfig:
         elastic_password=os.getenv("ELASTIC_PASSWORD") or None,
         elastic_request_timeout_seconds=int(os.getenv("ELASTIC_REQUEST_TIMEOUT_SECONDS", "10")),
         elastic_verify_certs=os.getenv("ELASTIC_VERIFY_CERTS", "true").lower() == "true",
+        max_ingestion_sync_limit=int(os.getenv("MAX_INGESTION_SYNC_LIMIT", "1000")),
+        ingestion_retry_attempts=int(os.getenv("INGESTION_RETRY_ATTEMPTS", "3")),
+        ingestion_retry_backoff_seconds=float(os.getenv("INGESTION_RETRY_BACKOFF_SECONDS", "0.5")),
     )
