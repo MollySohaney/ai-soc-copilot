@@ -12,8 +12,14 @@ class EventBase(BaseModel):
     """Represent the shared fields for a telemetry event."""
 
     event_id: str
+    dedup_key: str | None = None
+    ingestion_run_id: int | None = None
     timestamp: datetime
     source: str
+    source_provider: str | None = None
+    source_instance: str | None = None
+    source_index: str | None = None
+    source_record_id: str | None = None
     dataset: str | None = None
     event_category: str | None = None
     event_action: str | None = None
@@ -29,6 +35,9 @@ class EventBase(BaseModel):
     process_name: str | None = None
     process_command_line: str | None = None
     file_path: str | None = None
+    normalization_version: str | None = None
+    normalization_warnings: list[str] | None = None
+    raw_payload: dict[str, Any] | None = None
     raw_event: dict[str, Any] | None = None
 
 

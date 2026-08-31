@@ -18,6 +18,12 @@ from api.schemas.case_activity import CaseActivityRead, PaginatedCaseActivities
 from api.schemas.dashboard import DashboardSummary
 from api.schemas.detection_rule import DetectionRuleRead, PaginatedDetectionRules
 from api.schemas.event import PaginatedEvents
+from api.schemas.ingestion import (
+    IngestionConnectionTestResponse,
+    IngestionRunHistory,
+    IngestionStatusResponse,
+    IngestionSyncResponse,
+)
 from api_client.alerts import get_alert, get_alert_events, list_alerts, update_alert
 from api_client.cases import (
     add_case_alerts,
@@ -31,6 +37,12 @@ from api_client.cases import (
 from api_client.dashboard import get_dashboard_summary
 from api_client.events import list_events
 from api_client.http import ApiClientError
+from api_client.ingestion import (
+    get_status as get_ingestion_status,
+    list_runs as list_ingestion_runs,
+    sync_provider,
+    test_connection as check_ingestion_connection,
+)
 from api_client.rules import create_rule, list_rules, update_rule
 from db.models.alert import Alert
 from db.models.case import Case
@@ -289,3 +301,89 @@ def test_update_rule_persists_fields(api_client_transport: httpx.Client) -> None
     assert isinstance(result, DetectionRuleRead)
     assert result.enabled is False
     assert result.name == "Rule to update"
+
+
+def test_ingestion_connection_client_returns_typed_response(
+    api_client_transport: httpx.Client,
+) -> None:
+    """test_connection() returns a typed ingestion connection result."""
+    result = check_ingestion_connection(
+        "fixture",
+        source_name="fixture-client",
+        client=api_client_transport,
+    )
+
+    assert isinstance(result, IngestionConnectionTestResponse)
+    assert result.provider == "fixture"
+    assert result.source_name == "fixture-client"
+    assert result.ok is True
+
+
+def test_sync_provider_client_returns_typed_response(
+    api_client_transport: httpx.Client,
+) -> None:
+    """sync_provider() returns a typed ingestion sync result."""
+    result = sync_provider(
+        "fixture",
+        source_name="fixture-client",
+        start_time=BASE_TIME,
+        end_time=BASE_TIME.replace(hour=4),
+        limit=3,
+        client=api_client_transport,
+    )
+
+    assert isinstance(result, IngestionSyncResponse)
+    assert result.provider == "fixture"
+    assert result.status == "succeeded"
+    assert result.persisted_count == 3
+
+
+def test_get_ingestion_status_client_returns_typed_response(
+    api_client_transport: httpx.Client,
+) -> None:
+    """get_status() returns typed ingestion status."""
+    sync_provider(
+        "fixture",
+        source_name="fixture-status-client",
+        start_time=BASE_TIME,
+        end_time=BASE_TIME.replace(hour=4),
+        limit=3,
+        client=api_client_transport,
+    )
+
+    result = get_ingestion_status(client=api_client_transport)
+
+    assert isinstance(result, IngestionStatusResponse)
+    assert result.latest_run is not None
+    assert result.latest_run.provider == "fixture"
+    assert result.checkpoints
+
+
+def test_list_ingestion_runs_client_returns_typed_response(
+    api_client_transport: httpx.Client,
+) -> None:
+    """list_runs() returns typed ingestion run history."""
+    sync_provider(
+        "fixture",
+        source_name="fixture-runs-client",
+        start_time=BASE_TIME,
+        end_time=BASE_TIME.replace(hour=4),
+        limit=3,
+        client=api_client_transport,
+    )
+
+    result = list_ingestion_runs(page_size=5, client=api_client_transport)
+
+    assert isinstance(result, IngestionRunHistory)
+    assert result.total >= 1
+    assert all(item.provider for item in result.items)
+
+
+def test_ingestion_client_errors_surface_api_client_error(
+    api_client_transport: httpx.Client,
+) -> None:
+    """Ingestion endpoint errors propagate through ApiClientError."""
+    with pytest.raises(ApiClientError) as exc_info:
+        check_ingestion_connection("unknown", client=api_client_transport)
+
+    assert exc_info.value.status_code == 404
