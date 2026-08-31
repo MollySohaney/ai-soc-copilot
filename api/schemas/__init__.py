@@ -13,6 +13,16 @@ from api.schemas.case import CaseCreate, CaseRead
 from api.schemas.case_activity import CaseActivityCreate, CaseActivityRead
 from api.schemas.detection_rule import DetectionRuleCreate, DetectionRuleRead
 from api.schemas.event import EventCreate, EventRead, PaginatedEvents
+from api.schemas.ingestion import (
+    IngestionCheckpointRead,
+    IngestionConnectionTestRequest,
+    IngestionConnectionTestResponse,
+    IngestionRunHistory,
+    IngestionRunRead,
+    IngestionStatusResponse,
+    IngestionSyncRequest,
+    IngestionSyncResponse,
+)
 
 __all__ = [
     "AlertCreate",
@@ -29,4 +39,12 @@ __all__ = [
     "EventCreate",
     "EventRead",
     "PaginatedEvents",
+    "IngestionCheckpointRead",
+    "IngestionConnectionTestRequest",
+    "IngestionConnectionTestResponse",
+    "IngestionRunHistory",
+    "IngestionRunRead",
+    "IngestionStatusResponse",
+    "IngestionSyncRequest",
+    "IngestionSyncResponse",
 ]
