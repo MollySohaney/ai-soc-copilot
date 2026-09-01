@@ -31,6 +31,14 @@ class AppConfig(BaseModel):
     postgres_db: str = Field(default="ai_soc_copilot")
     postgres_user: str = Field(default="postgres")
     postgres_password: str = Field(default="postgres")
+    elastic_url: str | None = Field(default=None)
+    elastic_index_pattern: str = Field(default="logs-*")
+    elastic_source_name: str = Field(default="elastic-default")
+    elastic_api_key: str | None = Field(default=None)
+    elastic_username: str | None = Field(default=None)
+    elastic_password: str | None = Field(default=None)
+    elastic_request_timeout_seconds: int = Field(default=10)
+    elastic_verify_certs: bool = Field(default=True)
 
     @property
     def database_url(self) -> str:
@@ -94,6 +102,14 @@ class AppConfig(BaseModel):
             raise ValueError("Maximum upload size must be greater than zero.")
         return value
 
+    @field_validator("elastic_request_timeout_seconds")
+    @classmethod
+    def validate_elastic_timeout(cls, value: int) -> int:
+        """Ensure Elastic requests use a positive timeout."""
+        if value <= 0:
+            raise ValueError("Elastic request timeout must be greater than zero.")
+        return value
+
     @field_validator("frontend_origins")
     @classmethod
     def validate_frontend_origins(cls, value: list[str]) -> list[str]:
@@ -119,8 +135,12 @@ class AppConfig(BaseModel):
         Returns:
             Sanitized configuration data for display.
         """
-        safe_config = self.model_dump(exclude={"postgres_password"})
+        safe_config = self.model_dump(
+            exclude={"postgres_password", "elastic_api_key", "elastic_password"}
+        )
         safe_config["postgres_password"] = "[redacted]"
+        safe_config["elastic_api_key"] = "[redacted]" if self.elastic_api_key else None
+        safe_config["elastic_password"] = "[redacted]" if self.elastic_password else None
         return safe_config
 
 
@@ -155,4 +175,12 @@ def load_config() -> AppConfig:
         postgres_db=os.getenv("POSTGRES_DB", "ai_soc_copilot"),
         postgres_user=os.getenv("POSTGRES_USER", "postgres"),
         postgres_password=os.getenv("POSTGRES_PASSWORD", "postgres"),
+        elastic_url=os.getenv("ELASTIC_URL") or None,
+        elastic_index_pattern=os.getenv("ELASTIC_INDEX_PATTERN", "logs-*"),
+        elastic_source_name=os.getenv("ELASTIC_SOURCE_NAME", "elastic-default"),
+        elastic_api_key=os.getenv("ELASTIC_API_KEY") or None,
+        elastic_username=os.getenv("ELASTIC_USERNAME") or None,
+        elastic_password=os.getenv("ELASTIC_PASSWORD") or None,
+        elastic_request_timeout_seconds=int(os.getenv("ELASTIC_REQUEST_TIMEOUT_SECONDS", "10")),
+        elastic_verify_certs=os.getenv("ELASTIC_VERIFY_CERTS", "true").lower() == "true",
     )
