@@ -52,3 +52,33 @@ def test_config_rejects_non_positive_elastic_timeout() -> None:
         assert "Elastic request timeout" in str(error)
     else:
         raise AssertionError("Expected AppConfig to reject a zero Elastic timeout.")
+
+
+def test_config_rejects_non_positive_ingestion_limit() -> None:
+    """Manual ingestion sync limits must be positive."""
+    try:
+        AppConfig(max_ingestion_sync_limit=0)
+    except ValueError as error:
+        assert "Maximum ingestion sync limit" in str(error)
+    else:
+        raise AssertionError("Expected AppConfig to reject a zero ingestion limit.")
+
+
+def test_config_rejects_non_positive_ingestion_retry_attempts() -> None:
+    """Ingestion retry attempts must be positive."""
+    try:
+        AppConfig(ingestion_retry_attempts=0)
+    except ValueError as error:
+        assert "Ingestion retry attempts" in str(error)
+    else:
+        raise AssertionError("Expected AppConfig to reject zero retry attempts.")
+
+
+def test_config_rejects_negative_ingestion_retry_backoff() -> None:
+    """Ingestion retry backoff cannot be negative."""
+    try:
+        AppConfig(ingestion_retry_backoff_seconds=-0.1)
+    except ValueError as error:
+        assert "Ingestion retry backoff" in str(error)
+    else:
+        raise AssertionError("Expected AppConfig to reject negative retry backoff.")

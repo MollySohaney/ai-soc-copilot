@@ -11,6 +11,7 @@ AI SOC Copilot is structured to keep the Streamlit user interface isolated from 
 - `backend/models/`: Typed data contracts passed between services and the UI.
 - `backend/security/`: Validation and security-focused controls.
 - `backend/parsers/`: File parsing and normalization helpers.
+- `backend/ingestion/`: Provider-neutral telemetry ingestion adapters, source-record DTOs, ECS normalization, and restartable orchestration.
 - `backend/services/`: Business workflows and orchestration.
 - `backend/utils/`: Cross-cutting utilities such as logging.
 - `config/`: Centralized runtime configuration.
@@ -32,6 +33,12 @@ Connection settings are read from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB
 ## Phase 2 API Surface
 
 Phase 2's API surface (`api/v1/endpoints/`, covering events, alerts, cases, dashboard, and detection rules) is backed by PostgreSQL via `db/`, and the Streamlit frontend consumes it through the typed `api_client/` HTTP client rather than talking to the database directly.
+
+## Phase 3 Ingestion Surface
+
+Phase 3 adds `/api/v1/ingestion` endpoints for provider connection tests, bounded manual sync, current status, and run history. The core pipeline is provider-neutral: adapters return source records, the normalizer maps common ECS fields into canonical Event fields, and the orchestrator persists events plus run/checkpoint state.
+
+Elastic configuration is environment-driven and secrets are never returned through API, UI, or logs. Fixture ingestion remains available for deterministic demos without external services.
 
 ## Design Principles
 

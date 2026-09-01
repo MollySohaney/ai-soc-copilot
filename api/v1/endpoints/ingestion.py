@@ -57,6 +57,11 @@ def sync_ingestion(
     config: AppConfig = Depends(load_config),
 ) -> IngestionSyncResponse:
     """Run one bounded ingestion sync for a telemetry provider."""
+    if payload.limit > config.max_ingestion_sync_limit:
+        raise HTTPException(
+            status_code=422,
+            detail=f"limit must be less than or equal to {config.max_ingestion_sync_limit}",
+        )
     adapter = _build_adapter(provider, config, source_name=payload.source_name)
     request = IngestionFetchRequest(
         start_time=payload.start_time,
@@ -64,7 +69,12 @@ def sync_ingestion(
         limit=payload.limit,
     )
     try:
-        result = IngestionOrchestrator(db, adapter).run(request, dry_run=payload.dry_run)
+        result = IngestionOrchestrator(
+            db,
+            adapter,
+            retry_attempts=config.ingestion_retry_attempts,
+            retry_backoff_seconds=config.ingestion_retry_backoff_seconds,
+        ).run(request, dry_run=payload.dry_run)
     except Exception as error:  # noqa: BLE001
         _raise_http_error(error)
 

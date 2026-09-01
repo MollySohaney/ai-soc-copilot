@@ -10,6 +10,7 @@ AI SOC Copilot is a production-oriented Python application scaffold for SOC anal
 - Structured JSON logging for application observability
 - Modular backend packages for parsers, services, models, utilities, and security
 - Placeholder alert upload workflow for JSON, CSV, and TXT files
+- Restartable telemetry ingestion scaffold with Elastic and fixture providers
 - Test-ready code with type hints and Google-style docstrings
 
 ## Project Structure
@@ -83,6 +84,10 @@ pytest
 
 The suite (137+ tests) spans backend API tests, ORM/DB-constraint tests, seed-idempotency tests, `api_client` tests, and AppTest-based frontend page tests.
 
+## Telemetry Ingestion
+
+Phase 3 introduces bounded telemetry ingestion for normalized events. See [docs/ingestion.md](docs/ingestion.md) for Elastic setup, fixture demo commands, retry/limit settings, and minimum read-only permissions.
+
 ## API Documentation
 
 Once the API service is running, FastAPI auto-generates interactive documentation at `http://localhost:8000/docs` (Swagger UI) and `http://localhost:8000/redoc`.
@@ -109,18 +114,18 @@ Phase 2 wires the following pages to the FastAPI + PostgreSQL backend as real, p
 - Cases
 - Detection Rules
 
+Phase 3 adds telemetry ingestion status and sync controls to Integrations.
+
 The following pages remain UI prototypes on mock data and are not wired this phase:
 
 - MITRE Explorer
 - Threat Intelligence
 - Reports
 - Analyze Alert
-- Integrations
 - Settings
 
 Out of scope for this phase (deferred to future phases):
 
-- Live telemetry ingestion
 - A detection-rule execution engine
 - AI/LLM functionality
 
