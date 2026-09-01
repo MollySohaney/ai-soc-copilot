@@ -22,6 +22,10 @@ revision because the current seed module loads the Phase 3 model fields. An
 existing Phase 2 database must therefore be migrated to head before running
 the current seed command.
 
+A separate populated Phase 2 database was also upgraded. A legacy event was
+inserted before the migration and remained intact afterward with its original
+`event_id`, source, and message.
+
 ## Application Smoke
 
 FastAPI and Streamlit were launched against the isolated database:
