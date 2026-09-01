@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
-from elastic_transport import ApiResponseMeta, ConnectionTimeout, NodeConfig
+from elastic_transport import ApiResponseMeta, ConnectionError, ConnectionTimeout, NodeConfig
 from elasticsearch import AuthenticationException
 
 from backend.ingestion import IngestionCheckpointState, IngestionFetchRequest
@@ -114,6 +114,26 @@ def test_elastic_connection_auth_failure_is_sanitized() -> None:
     assert health.ok is False
     assert health.message == "Elastic authentication or authorization failed."
     assert "unauthorized" not in health.model_dump_json()
+
+
+def test_elastic_connection_timeout_is_distinguished() -> None:
+    """Connection tests identify provider timeouts without exposing details."""
+    health = ElasticIngestionAdapter(
+        _config(), client=FakeElasticClient(info_response=ConnectionTimeout("timed out"))
+    ).test_connection()
+
+    assert health.ok is False
+    assert health.message == "Elastic request timed out."
+
+
+def test_elastic_connection_unreachable_host_is_distinguished() -> None:
+    """Connection tests identify unreachable providers without exposing host details."""
+    health = ElasticIngestionAdapter(
+        _config(), client=FakeElasticClient(info_response=ConnectionError("connection refused"))
+    ).test_connection()
+
+    assert health.ok is False
+    assert health.message == "Elastic connection failed."
 
 
 def test_elastic_fetch_success_maps_hits_to_source_records() -> None:
