@@ -21,6 +21,8 @@ from db.models import (
     CaseStatusEnum,
     DetectionRule,
     Event,
+    IngestionCheckpoint,
+    IngestionRun,
     SeverityEnum,
 )
 
@@ -188,6 +190,116 @@ def test_duplicate_event_event_id_rejected(session: Session) -> None:
     session.commit()
 
     session.add(_make_event("evt-dup-1"))
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()
+
+
+def test_create_ingested_event_with_source_identity(session: Session) -> None:
+    """An ingested Event stores source identity, dedup, normalization, and raw evidence."""
+    run = IngestionRun(provider="elastic", source_name="elastic-default")
+    event = Event(
+        event_id="evt-ingested-1",
+        dedup_key="elastic:logs-security:abc123",
+        ingestion_run=run,
+        timestamp=datetime.now(timezone.utc),
+        source="elastic",
+        source_provider="elastic",
+        source_instance="elastic-default",
+        source_index="logs-security",
+        source_record_id="abc123",
+        event_category="authentication",
+        normalization_version="ecs-v1",
+        normalization_warnings=["missing user.name"],
+        raw_payload={"_id": "abc123", "_source": {"event": {"category": "authentication"}}},
+    )
+    session.add(event)
+    session.commit()
+
+    fetched = session.query(Event).filter_by(event_id="evt-ingested-1").one()
+
+    assert fetched.ingestion_run.provider == "elastic"
+    assert fetched.dedup_key == "elastic:logs-security:abc123"
+    assert fetched.source_provider == "elastic"
+    assert fetched.source_instance == "elastic-default"
+    assert fetched.source_index == "logs-security"
+    assert fetched.source_record_id == "abc123"
+    assert fetched.normalization_version == "ecs-v1"
+    assert fetched.normalization_warnings == ["missing user.name"]
+    assert fetched.raw_payload == {
+        "_id": "abc123",
+        "_source": {"event": {"category": "authentication"}},
+    }
+
+
+def test_duplicate_event_dedup_key_rejected(session: Session) -> None:
+    """Two ingested events sharing the same dedup_key violate the unique constraint."""
+    session.add(
+        Event(
+            event_id="evt-dedup-1",
+            dedup_key="elastic:logs-security:dup",
+            timestamp=datetime.now(timezone.utc),
+            source="elastic",
+        )
+    )
+    session.commit()
+
+    session.add(
+        Event(
+            event_id="evt-dedup-2",
+            dedup_key="elastic:logs-security:dup",
+            timestamp=datetime.now(timezone.utc),
+            source="elastic",
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()
+
+
+def test_create_ingestion_checkpoint(session: Session) -> None:
+    """An IngestionCheckpoint stores restart state for one provider source."""
+    run = IngestionRun(
+        provider="elastic",
+        source_name="elastic-default",
+        status="succeeded",
+        fetched_count=2,
+        persisted_count=2,
+    )
+    checkpoint = IngestionCheckpoint(
+        provider="elastic",
+        source_name="elastic-default",
+        checkpoint={"search_after": ["2026-08-15T02:00:00Z", "abc123"]},
+        last_run=run,
+    )
+    session.add(checkpoint)
+    session.commit()
+
+    fetched = session.query(IngestionCheckpoint).filter_by(provider="elastic").one()
+
+    assert fetched.source_name == "elastic-default"
+    assert fetched.checkpoint == {"search_after": ["2026-08-15T02:00:00Z", "abc123"]}
+    assert fetched.last_run.status == "succeeded"
+
+
+def test_duplicate_ingestion_checkpoint_source_rejected(session: Session) -> None:
+    """A provider/source pair has exactly one checkpoint row."""
+    session.add(
+        IngestionCheckpoint(
+            provider="elastic",
+            source_name="elastic-default",
+            checkpoint={"search_after": ["a"]},
+        )
+    )
+    session.commit()
+
+    session.add(
+        IngestionCheckpoint(
+            provider="elastic",
+            source_name="elastic-default",
+            checkpoint={"search_after": ["b"]},
+        )
+    )
     with pytest.raises(IntegrityError):
         session.commit()
     session.rollback()
