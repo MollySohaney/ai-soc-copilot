@@ -12,6 +12,7 @@ from backend.ingestion.dto import (
     IngestionCheckpointState,
     IngestionFetchRequest,
     IngestionPage,
+    IngestionRunResult,
     SourceRecord,
 )
 from backend.ingestion.errors import (
@@ -26,6 +27,7 @@ from backend.ingestion.normalizers import (
     EcsEventNormalizer,
     NormalizedEvent,
 )
+from backend.ingestion.orchestrator import IngestionOrchestrator
 
 __all__ = [
     "AdapterHealth",
@@ -35,6 +37,7 @@ __all__ = [
     "IngestionCheckpointState",
     "IngestionFetchRequest",
     "IngestionPage",
+    "IngestionRunResult",
     "SourceRecord",
     "IngestionAdapterError",
     "IngestionAuthenticationError",
@@ -44,4 +47,5 @@ __all__ = [
     "EcsEventNormalizer",
     "NormalizedEvent",
     "NORMALIZATION_VERSION",
+    "IngestionOrchestrator",
 ]
