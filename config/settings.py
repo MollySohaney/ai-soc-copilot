@@ -42,6 +42,15 @@ class AppConfig(BaseModel):
     max_ingestion_sync_limit: int = Field(default=1000)
     ingestion_retry_attempts: int = Field(default=3)
     ingestion_retry_backoff_seconds: float = Field(default=0.5)
+    ai_enabled: bool = Field(default=False)
+    ai_provider: str = Field(default="fake")
+    ai_model: str = Field(default="fake-model")
+    ai_api_key: str | None = Field(default=None)
+    ai_request_timeout_seconds: float = Field(default=30.0)
+    ai_max_input_tokens: int = Field(default=4000)
+    ai_max_output_tokens: int = Field(default=1000)
+    ai_prompt_version: str = Field(default="v1")
+    ai_response_schema_version: str = Field(default="v1")
 
     @property
     def database_url(self) -> str:
@@ -156,18 +165,44 @@ class AppConfig(BaseModel):
             raise ValueError("At least one frontend origin must be configured.")
         return normalized
 
-    def to_safe_dict(self) -> dict[str, str | int | bool | list[str]]:
+    @field_validator("ai_provider", "ai_model", "ai_prompt_version", "ai_response_schema_version")
+    @classmethod
+    def validate_ai_identifiers(cls, value: str) -> str:
+        """Ensure AI identifiers are non-empty and normalized."""
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("AI configuration identifiers must not be empty.")
+        return normalized
+
+    @field_validator("ai_request_timeout_seconds")
+    @classmethod
+    def validate_ai_timeout(cls, value: float) -> float:
+        """Ensure AI requests use a positive timeout."""
+        if value <= 0:
+            raise ValueError("AI request timeout must be greater than zero.")
+        return value
+
+    @field_validator("ai_max_input_tokens", "ai_max_output_tokens")
+    @classmethod
+    def validate_ai_token_limits(cls, value: int) -> int:
+        """Ensure AI token limits are positive."""
+        if value <= 0:
+            raise ValueError("AI token limits must be greater than zero.")
+        return value
+
+    def to_safe_dict(self) -> dict[str, str | int | float | bool | list[str] | None]:
         """Return a UI-safe configuration view.
 
         Returns:
             Sanitized configuration data for display.
         """
         safe_config = self.model_dump(
-            exclude={"postgres_password", "elastic_api_key", "elastic_password"}
+            exclude={"postgres_password", "elastic_api_key", "elastic_password", "ai_api_key"}
         )
         safe_config["postgres_password"] = "[redacted]"
         safe_config["elastic_api_key"] = "[redacted]" if self.elastic_api_key else None
         safe_config["elastic_password"] = "[redacted]" if self.elastic_password else None
+        safe_config["ai_api_key"] = "[redacted]" if self.ai_api_key else None
         return safe_config
 
 
@@ -213,4 +248,13 @@ def load_config() -> AppConfig:
         max_ingestion_sync_limit=int(os.getenv("MAX_INGESTION_SYNC_LIMIT", "1000")),
         ingestion_retry_attempts=int(os.getenv("INGESTION_RETRY_ATTEMPTS", "3")),
         ingestion_retry_backoff_seconds=float(os.getenv("INGESTION_RETRY_BACKOFF_SECONDS", "0.5")),
+        ai_enabled=os.getenv("AI_ENABLED", "false").lower() == "true",
+        ai_provider=os.getenv("AI_PROVIDER", "fake"),
+        ai_model=os.getenv("AI_MODEL", "fake-model"),
+        ai_api_key=os.getenv("AI_API_KEY") or None,
+        ai_request_timeout_seconds=float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "30")),
+        ai_max_input_tokens=int(os.getenv("AI_MAX_INPUT_TOKENS", "4000")),
+        ai_max_output_tokens=int(os.getenv("AI_MAX_OUTPUT_TOKENS", "1000")),
+        ai_prompt_version=os.getenv("AI_PROMPT_VERSION", "v1"),
+        ai_response_schema_version=os.getenv("AI_RESPONSE_SCHEMA_VERSION", "v1"),
     )
