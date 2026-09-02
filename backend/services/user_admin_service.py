@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from backend.audit import AuditService
 from backend.security.auth import create_user
 from backend.security.rbac import Permission, require_user_permission
 from db.models import AuthSession, RoleEnum, User
@@ -56,7 +57,24 @@ class UserAdminService:
             self._db, username=username, password=password, role=role
         )
         if not created:
+            AuditService(self._db).record(
+                action="admin.user.create",
+                outcome="failed",
+                actor=actor,
+                target_type="user",
+                target_id=user.id,
+                details={"reason": "duplicate_username"},
+            )
+            self._db.commit()
             raise DuplicateUserError("Username already exists.")
+        AuditService(self._db).record(
+            action="admin.user.create",
+            outcome="succeeded",
+            actor=actor,
+            target_type="user",
+            target_id=user.id,
+            after_state={"username": user.username, "role": user.role.value, "is_active": True},
+        )
         self._db.commit()
         self._db.refresh(user)
         return user
@@ -75,6 +93,11 @@ class UserAdminService:
         if target is None:
             raise UserNotFoundError("User not found.")
 
+        before_state = {
+            "username": target.username,
+            "role": target.role.value,
+            "is_active": target.is_active,
+        }
         removes_active_admin = (
             target.role == RoleEnum.ADMIN
             and target.is_active
@@ -87,6 +110,16 @@ class UserAdminService:
                 .where(User.role == RoleEnum.ADMIN, User.is_active.is_(True))
             )
             if (active_admins or 0) <= 1:
+                AuditService(self._db).record(
+                    action="admin.user.update",
+                    outcome="failed",
+                    actor=actor,
+                    target_type="user",
+                    target_id=target.id,
+                    before_state=before_state,
+                    details={"reason": "final_active_admin"},
+                )
+                self._db.commit()
                 raise FinalAdminError("The final active Admin cannot be changed.")
 
         role_changed = role is not None and role != target.role
@@ -98,6 +131,19 @@ class UserAdminService:
         if role_changed or active_changed:
             target.updated_at = datetime.now(timezone.utc)
             self._revoke_sessions(user_id=target.id)
+            AuditService(self._db).record(
+                action="admin.user.update",
+                outcome="succeeded",
+                actor=actor,
+                target_type="user",
+                target_id=target.id,
+                before_state=before_state,
+                after_state={
+                    "username": target.username,
+                    "role": target.role.value,
+                    "is_active": target.is_active,
+                },
+            )
         self._db.commit()
         self._db.refresh(target)
         return target
@@ -108,6 +154,13 @@ class UserAdminService:
         if self._db.get(User, user_id) is None:
             raise UserNotFoundError("User not found.")
         self._revoke_sessions(user_id=user_id)
+        AuditService(self._db).record(
+            action="admin.user.sessions_revoke",
+            outcome="succeeded",
+            actor=actor,
+            target_type="user",
+            target_id=user_id,
+        )
         self._db.commit()
 
     def _revoke_sessions(self, *, user_id: int) -> None:

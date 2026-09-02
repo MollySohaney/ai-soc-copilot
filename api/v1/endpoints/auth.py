@@ -14,6 +14,7 @@ from backend.security.auth import (
     revoke_session,
 )
 from backend.security.login_limiter import LoginAttemptLimiter, get_login_limiter
+from backend.audit import AuditService
 from config.settings import AppConfig, load_config
 from db.session import get_db
 
@@ -36,6 +37,13 @@ def login(
         max_attempts=config.auth_login_max_attempts,
         window_seconds=config.auth_login_window_seconds,
     ):
+        AuditService(db).record(
+            action="auth.login",
+            outcome="denied",
+            actor_identifier=payload.username,
+            details={"reason": "rate_limited"},
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts. Try again later.",
@@ -47,6 +55,13 @@ def login(
     )
     if user is None:
         limiter.record_failure(limit_key, window_seconds=config.auth_login_window_seconds)
+        AuditService(db).record(
+            action="auth.login",
+            outcome="failed",
+            actor_identifier=payload.username,
+            details={"reason": "invalid_credentials"},
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password.",
@@ -55,6 +70,13 @@ def login(
 
     limiter.clear(limit_key)
     issued = issue_session(db, user=user, config=config)
+    AuditService(db).record(
+        action="auth.login",
+        outcome="succeeded",
+        actor=user,
+        target_type="auth_session",
+        target_id=issued.session.id,
+    )
     db.commit()
     return LoginResponse(
         access_token=issued.access_token,
@@ -77,4 +99,12 @@ def logout(
     db: Session = Depends(get_db),
 ) -> None:
     """Revoke the caller's current session."""
-    revoke_session(db, session=principal.session)
+    revoke_session(db, session=principal.session, commit=False)
+    AuditService(db).record(
+        action="auth.logout",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="auth_session",
+        target_id=principal.session.id,
+    )
+    db.commit()

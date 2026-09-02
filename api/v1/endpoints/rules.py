@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_permission
+from backend.audit import AuditService
 from api.schemas.detection_rule import (
     DetectionRuleCreate,
     DetectionRuleRead,
@@ -24,6 +25,7 @@ from api.schemas.detection_rule import (
 )
 from backend.detection.dsl import parse_logic
 from backend.detection.service import execute_rule
+from backend.security.auth import AuthenticatedPrincipal
 from backend.security.rbac import Permission
 from db.models.detection_rule import DetectionRule, DetectionRuleVersion
 from db.models.detection_run import DetectionRun
@@ -42,23 +44,99 @@ def _execution_window(rule: DetectionRule, request: RuleExecutionRequest) -> tup
 @router.post(
     "/validate",
     response_model=RuleValidationResponse,
-    dependencies=[Depends(require_permission(Permission.MANAGE_DETECTIONS))],
 )
-def validate_rule(payload: ValidateRuleRequest) -> RuleValidationResponse:
+def validate_rule(
+    payload: ValidateRuleRequest,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MANAGE_DETECTIONS)
+    ),
+    db: Session = Depends(get_db),
+) -> RuleValidationResponse:
     """Validate structured rule logic without saving or executing it."""
-    logic = parse_logic(payload.logic)
+    try:
+        logic = parse_logic(payload.logic)
+    except ValueError as error:
+        AuditService(db).record(
+            action="rule.validate",
+            outcome="failed",
+            actor=principal.user,
+            target_type="detection_rule_logic",
+            details={"error_type": type(error).__name__},
+        )
+        db.commit()
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    AuditService(db).record(
+        action="rule.validate",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="detection_rule_logic",
+        details={"rule_type": logic.rule_type, "dsl_version": logic.dsl_version},
+    )
+    db.commit()
     return RuleValidationResponse(valid=True, dsl_version=logic.dsl_version, rule_type=logic.rule_type)
 
 
-def _run_rule(payload: RuleExecutionRequest, db: Session, *, dry_run: bool) -> DetectionExecutionResponse:
+def _run_rule(
+    payload: RuleExecutionRequest,
+    db: Session,
+    principal: AuthenticatedPrincipal,
+    *,
+    dry_run: bool,
+) -> DetectionExecutionResponse:
     rule = db.get(DetectionRule, payload.rule_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Detection rule not found")
     start, end = _execution_window(rule, payload)
+    action = "rule.test" if dry_run else "rule.execute"
+
+    def _record_completed(run: DetectionRun, alert_ids: tuple[int, ...]) -> None:
+        AuditService(db).record(
+            action=action,
+            outcome="succeeded",
+            actor=principal.user,
+            target_type="detection_rule",
+            target_id=rule.id,
+            details={
+                "run_id": run.id,
+                "rule_version": rule.version,
+                "alerts_created": list(alert_ids),
+            },
+        )
+
     try:
-        result = execute_rule(db, rule, window_start=start, window_end=end, dry_run=dry_run)
+        result = execute_rule(
+            db,
+            rule,
+            window_start=start,
+            window_end=end,
+            dry_run=dry_run,
+            before_commit=None if dry_run else _record_completed,
+        )
     except ValueError as error:
+        AuditService(db).record(
+            action=action,
+            outcome="failed",
+            actor=principal.user,
+            target_type="detection_rule",
+            target_id=rule.id,
+            details={"error_type": type(error).__name__},
+        )
+        db.commit()
         raise HTTPException(status_code=422, detail=str(error)) from error
+    if dry_run or result.run_id is None:
+        AuditService(db).record(
+            action=action,
+            outcome="succeeded",
+            actor=principal.user,
+            target_type="detection_rule",
+            target_id=rule.id,
+            details={
+                "run_id": result.run_id,
+                "rule_version": rule.version,
+                "alerts_created": list(result.alerts_created),
+            },
+        )
+        db.commit()
     return DetectionExecutionResponse(
         status=result.status, run_id=result.run_id, events_scanned=result.events_scanned,
         alerts_created=list(result.alerts_created), would_fire=list(result.would_fire),
@@ -69,21 +147,31 @@ def _run_rule(payload: RuleExecutionRequest, db: Session, *, dry_run: bool) -> D
 @router.post(
     "/test",
     response_model=DetectionExecutionResponse,
-    dependencies=[Depends(require_permission(Permission.MANAGE_DETECTIONS))],
 )
-def test_rule(payload: RuleExecutionRequest, db: Session = Depends(get_db)) -> DetectionExecutionResponse:
+def test_rule(
+    payload: RuleExecutionRequest,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MANAGE_DETECTIONS)
+    ),
+    db: Session = Depends(get_db),
+) -> DetectionExecutionResponse:
     """Dry-run a rule without creating alerts or a persisted detection run."""
-    return _run_rule(payload, db, dry_run=True)
+    return _run_rule(payload, db, principal, dry_run=True)
 
 
 @router.post(
     "/execute",
     response_model=DetectionExecutionResponse,
-    dependencies=[Depends(require_permission(Permission.MANAGE_DETECTIONS))],
 )
-def execute_rule_now(payload: RuleExecutionRequest, db: Session = Depends(get_db)) -> DetectionExecutionResponse:
+def execute_rule_now(
+    payload: RuleExecutionRequest,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MANAGE_DETECTIONS)
+    ),
+    db: Session = Depends(get_db),
+) -> DetectionExecutionResponse:
     """Execute a rule over an explicit or configured lookback window."""
-    return _run_rule(payload, db, dry_run=False)
+    return _run_rule(payload, db, principal, dry_run=False)
 
 
 @router.get("/{rule_id}/runs", response_model=PaginatedDetectionRuns)
@@ -185,9 +273,14 @@ def list_rules(
     "",
     response_model=DetectionRuleRead,
     status_code=201,
-    dependencies=[Depends(require_permission(Permission.MANAGE_DETECTIONS))],
 )
-def create_rule(payload: DetectionRuleCreate, db: Session = Depends(get_db)) -> DetectionRule:
+def create_rule(
+    payload: DetectionRuleCreate,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MANAGE_DETECTIONS)
+    ),
+    db: Session = Depends(get_db),
+) -> DetectionRule:
     """Create a detection rule.
 
     Args:
@@ -217,6 +310,19 @@ def create_rule(payload: DetectionRuleCreate, db: Session = Depends(get_db)) -> 
             legacy_query=rule.query,
         )
     )
+    AuditService(db).record(
+        action="rule.create",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="detection_rule",
+        target_id=rule.id,
+        after_state={
+            "name": rule.name,
+            "version": rule.version,
+            "enabled": rule.enabled,
+            "enabled_for_execution": rule.enabled_for_execution,
+        },
+    )
     db.commit()
     db.refresh(rule)
     return rule
@@ -245,10 +351,14 @@ def get_rule(rule_id: int, db: Session = Depends(get_db)) -> DetectionRule:
 @router.patch(
     "/{rule_id}",
     response_model=DetectionRuleRead,
-    dependencies=[Depends(require_permission(Permission.MANAGE_DETECTIONS))],
 )
 def update_rule(
-    rule_id: int, payload: DetectionRuleUpdate, db: Session = Depends(get_db)
+    rule_id: int,
+    payload: DetectionRuleUpdate,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MANAGE_DETECTIONS)
+    ),
+    db: Session = Depends(get_db),
 ) -> DetectionRule:
     """Apply a partial update to a detection rule.
 
@@ -268,6 +378,12 @@ def update_rule(
     if rule is None:
         raise HTTPException(status_code=404, detail="Detection rule not found")
 
+    before_state = {
+        "name": rule.name,
+        "version": rule.version,
+        "enabled": rule.enabled,
+        "enabled_for_execution": rule.enabled_for_execution,
+    }
     updates = payload.model_dump(exclude_unset=True)
 
     if "name" in updates and updates["name"] != rule.name:
@@ -313,6 +429,21 @@ def update_rule(
         )
     if updates:
         rule.updated_at = datetime.now(timezone.utc)
+
+    AuditService(db).record(
+        action="rule.update",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="detection_rule",
+        target_id=rule.id,
+        before_state=before_state,
+        after_state={
+            "name": rule.name,
+            "version": rule.version,
+            "enabled": rule.enabled,
+            "enabled_for_execution": rule.enabled_for_execution,
+        },
+    )
 
     db.commit()
     db.refresh(rule)

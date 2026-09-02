@@ -31,6 +31,8 @@ from backend.ingestion import (
     IngestionOrchestrator,
     IngestionTimeoutError,
 )
+from backend.audit import AuditService
+from backend.security.auth import AuthenticatedPrincipal
 from backend.security.rbac import Permission
 from config.settings import AppConfig, load_config
 from db.models import IngestionCheckpoint, IngestionRun
@@ -42,27 +44,54 @@ router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 @router.post(
     "/{provider}/test",
     response_model=IngestionConnectionTestResponse,
-    dependencies=[Depends(require_permission(Permission.OPERATE_INTEGRATIONS))],
 )
 def test_ingestion_connection(
     provider: str,
     payload: IngestionConnectionTestRequest | None = None,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.OPERATE_INTEGRATIONS)
+    ),
+    db: Session = Depends(get_db),
     config: AppConfig = Depends(load_config),
 ) -> IngestionConnectionTestResponse:
     """Test a telemetry provider connection without exposing secrets."""
-    adapter = _build_adapter(provider, config, source_name=payload.source_name if payload else None)
-    health = adapter.test_connection()
+    source_name = payload.source_name if payload else None
+    try:
+        adapter = _build_adapter(provider, config, source_name=source_name)
+        health = adapter.test_connection()
+    except Exception as error:  # noqa: BLE001
+        AuditService(db).record(
+            action="integration.test",
+            outcome="failed",
+            actor=principal.user,
+            target_type="integration",
+            target_id=provider.lower(),
+            details={"source_name": source_name, "error_type": type(error).__name__},
+        )
+        db.commit()
+        _raise_http_error(error)
+    AuditService(db).record(
+        action="integration.test",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="integration",
+        target_id=provider.lower(),
+        details={"source_name": source_name, "ok": health.ok},
+    )
+    db.commit()
     return IngestionConnectionTestResponse.model_validate(health.model_dump())
 
 
 @router.post(
     "/{provider}/sync",
     response_model=IngestionSyncResponse,
-    dependencies=[Depends(require_permission(Permission.OPERATE_INTEGRATIONS))],
 )
 def sync_ingestion(
     provider: str,
     payload: IngestionSyncRequest,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.OPERATE_INTEGRATIONS)
+    ),
     db: Session = Depends(get_db),
     config: AppConfig = Depends(load_config),
 ) -> IngestionSyncResponse:
@@ -79,12 +108,27 @@ def sync_ingestion(
         limit=payload.limit,
     )
     try:
+        def _record_run(run: IngestionRun) -> None:
+            AuditService(db).record(
+                action="integration.sync",
+                outcome="failed" if run.status == "failed" else "succeeded",
+                actor=principal.user,
+                target_type="ingestion_run",
+                target_id=run.id,
+                details={
+                    "provider": run.provider,
+                    "source_name": run.source_name,
+                    "status": run.status,
+                    "dry_run": payload.dry_run,
+                },
+            )
+
         result = IngestionOrchestrator(
             db,
             adapter,
             retry_attempts=config.ingestion_retry_attempts,
             retry_backoff_seconds=config.ingestion_retry_backoff_seconds,
-        ).run(request, dry_run=payload.dry_run)
+        ).run(request, dry_run=payload.dry_run, before_commit=_record_run)
     except Exception as error:  # noqa: BLE001
         _raise_http_error(error)
 
@@ -162,6 +206,8 @@ def _build_adapter(
 
 
 def _raise_http_error(error: Exception) -> None:
+    if isinstance(error, HTTPException):
+        raise error
     if isinstance(error, IngestionConfigurationError):
         raise HTTPException(status_code=400, detail=str(error)) from error
     if isinstance(error, IngestionAuthenticationError):

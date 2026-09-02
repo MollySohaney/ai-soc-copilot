@@ -11,6 +11,8 @@ from backend.ai.prompts import TRIAGE_SYSTEM_INSTRUCTION
 from backend.ai.provider import AIProviderError, build_ai_provider
 from backend.ai.provider import AIRequest
 from backend.ai.triage import TriageValidationError, validate_copilot_output
+from backend.audit import AuditService
+from backend.security.auth import AuthenticatedPrincipal
 from backend.security.rbac import Permission
 from config.settings import load_config
 from db.models import AIAnalysis, Case
@@ -23,9 +25,13 @@ router = APIRouter(prefix="/cases/{case_id}/ai", tags=["ai"])
     "/ask",
     response_model=AIAnalysisRead,
     status_code=201,
-    dependencies=[Depends(require_permission(Permission.REQUEST_AI))],
 )
-def ask_copilot(case_id: int, payload: AICopilotQuestion, db: Session = Depends(get_db)) -> AIAnalysis:
+def ask_copilot(
+    case_id: int,
+    payload: AICopilotQuestion,
+    principal: AuthenticatedPrincipal = Depends(require_permission(Permission.REQUEST_AI)),
+    db: Session = Depends(get_db),
+) -> AIAnalysis:
     """Answer one question using only approved evidence linked to the case."""
     if db.get(Case, case_id) is None:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -56,6 +62,20 @@ def ask_copilot(case_id: int, payload: AICopilotQuestion, db: Session = Depends(
             error_message=getattr(error, "safe_message", str(error)),
         )
     db.add(record)
+    db.flush()
+    AuditService(db).record(
+        action="ai.copilot.request",
+        outcome="succeeded" if record.status == "succeeded" else "failed",
+        actor=principal.user,
+        target_type="ai_analysis",
+        target_id=record.id,
+        details={
+            "case_id": case_id,
+            "status": record.status,
+            "provider": record.provider,
+            "model": record.model,
+        },
+    )
     db.commit()
     db.refresh(record)
     return record

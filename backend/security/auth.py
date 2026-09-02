@@ -13,6 +13,7 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from backend.audit import AuditService
 from config.settings import AppConfig
 from db.models import AuthSession, RoleEnum, User
 
@@ -179,6 +180,14 @@ def authenticate_session(
     )
     if current_time >= _as_utc(session.absolute_expires_at) or current_time >= idle_expires_at:
         session.revoked_at = current_time
+        AuditService(db).record(
+            action="auth.session_expired",
+            outcome="failed",
+            actor=session.user,
+            target_type="auth_session",
+            target_id=session.id,
+            details={"reason": "expired"},
+        )
         db.commit()
         raise AuthenticationError("Authentication required.")
 
@@ -187,11 +196,12 @@ def authenticate_session(
     return AuthenticatedPrincipal(user=session.user, session=session)
 
 
-def revoke_session(db: Session, *, session: AuthSession) -> None:
+def revoke_session(db: Session, *, session: AuthSession, commit: bool = True) -> None:
     """Revoke one session idempotently."""
     if session.revoked_at is None:
         session.revoked_at = utc_now()
-        db.commit()
+        if commit:
+            db.commit()
 
 
 def revoke_user_sessions(db: Session, *, user_id: int) -> None:
