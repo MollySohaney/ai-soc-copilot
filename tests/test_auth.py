@@ -60,7 +60,12 @@ def test_login_returns_token_once_and_persists_only_digest(
     body = _login(anonymous_client, user.username, password)
 
     assert body["token_type"] == "bearer"
-    assert body["user"] == {"id": user.id, "username": user.username, "is_active": True}
+    assert body["user"] == {
+        "id": user.id,
+        "username": user.username,
+        "role": "viewer",
+        "is_active": True,
+    }
     assert "password" not in str(body).lower()
     session = db_session.scalar(
         select(AuthSession).where(AuthSession.user_id == user.id)

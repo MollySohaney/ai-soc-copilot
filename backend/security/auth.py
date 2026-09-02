@@ -14,7 +14,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from config.settings import AppConfig
-from db.models import AuthSession, User
+from db.models import AuthSession, RoleEnum, User
 
 _USERNAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
 _PASSWORD_HASHER = PasswordHasher(
@@ -93,14 +93,25 @@ def verify_password(password_hash: str, password: str) -> bool:
         return False
 
 
-def create_user(db: Session, *, username: str, password: str) -> tuple[User, bool]:
+def create_user(
+    db: Session,
+    *,
+    username: str,
+    password: str,
+    role: RoleEnum = RoleEnum.VIEWER,
+) -> tuple[User, bool]:
     """Create a local user once without changing an existing credential."""
     normalized = normalize_username(username)
     existing = db.scalar(select(User).where(User.username == normalized))
     if existing is not None:
         return existing, False
 
-    user = User(username=normalized, password_hash=hash_password(password), is_active=True)
+    user = User(
+        username=normalized,
+        password_hash=hash_password(password),
+        role=role,
+        is_active=True,
+    )
     db.add(user)
     db.flush()
     return user, True

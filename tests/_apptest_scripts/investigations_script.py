@@ -16,6 +16,13 @@ from config.settings import AppConfig
 
 st.cache_data.clear()
 st.cache_resource.clear()
+test_role = st.session_state.get("_test_role", "admin")
+st.session_state["_auth_user"] = {
+    "id": 1,
+    "username": "test-admin",
+    "role": test_role,
+    "is_active": True,
+}
 
 config = AppConfig()
 investigations.render(config=config)

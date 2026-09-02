@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
+
+
+class RoleEnum(str, enum.Enum):
+    """Enumerate the supported least-privilege application roles."""
+
+    VIEWER = "viewer"
+    ANALYST = "analyst"
+    DETECTION_ENGINEER = "detection_engineer"
+    ADMIN = "admin"
 
 
 class User(Base):
@@ -19,6 +29,15 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(64), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    role: Mapped[RoleEnum] = mapped_column(
+        Enum(
+            RoleEnum,
+            values_callable=lambda roles: [role.value for role in roles],
+            native_enum=False,
+        ),
+        nullable=False,
+        default=RoleEnum.VIEWER,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False

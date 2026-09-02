@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from db.models.user import RoleEnum
+
 
 class LoginRequest(BaseModel):
     """Accept a bounded local username and secret password."""
@@ -21,6 +23,7 @@ class UserRead(BaseModel):
 
     id: int
     username: str
+    role: RoleEnum
     is_active: bool
 
 

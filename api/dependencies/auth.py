@@ -7,6 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from backend.security.auth import AuthenticatedPrincipal, AuthenticationError, authenticate_session
+from backend.security.rbac import AuthorizationDenied, Permission, require_user_permission
 from config.settings import AppConfig, load_config
 from db.session import get_db
 
@@ -33,3 +34,21 @@ def _authentication_error() -> HTTPException:
         detail="Authentication required.",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+def require_permission(permission: Permission):  # noqa: ANN201
+    """Build a FastAPI dependency backed by the central permission service."""
+
+    def dependency(
+        principal: AuthenticatedPrincipal = Depends(require_authenticated_user),
+    ) -> AuthenticatedPrincipal:
+        try:
+            require_user_permission(principal.user, permission)
+        except AuthorizationDenied as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permission.",
+            ) from error
+        return principal
+
+    return dependency

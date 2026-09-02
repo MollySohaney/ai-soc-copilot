@@ -16,6 +16,7 @@ import streamlit as st
 from api.schemas.auth import LoginResponse, UserRead
 from api_client import auth as auth_api
 from api_client.http import ApiClientError, build_client
+from backend.security.rbac import Permission, role_has_permission
 from config.settings import load_config
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     "get_client",
     "get_current_user",
     "get_public_client",
+    "has_permission",
     "loading",
     "logout",
     "render_empty_state",
@@ -89,6 +91,12 @@ def get_current_user() -> UserRead | None:
     if isinstance(value, dict):
         return UserRead.model_validate(value)
     return None
+
+
+def has_permission(permission: Permission) -> bool:
+    """Drive role-aware UI affordances without replacing server authorization."""
+    user = get_current_user()
+    return user is not None and role_has_permission(user.role, permission)
 
 
 def validate_authenticated_session() -> tuple[bool, str | None]:
