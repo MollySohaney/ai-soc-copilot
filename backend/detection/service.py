@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.detection.dsl import DetectionLogic, parse_logic
@@ -16,6 +16,7 @@ from backend.detection.matcher import match_event
 from backend.detection.sequence import SequenceMatch, evaluate_sequence
 from backend.detection.threshold import ThresholdMatch, evaluate_threshold
 from db.models import Alert, DetectionRule, DetectionRun, Event, SeverityEnum
+from db.models.alert import alert_event
 
 
 @dataclass(frozen=True)
@@ -99,7 +100,7 @@ def execute_rule(
         elif logic.rule_type == "threshold":
             firings = [{"group": item.group, "evidence_event_ids": list(item.evidence_event_ids)} for item in evaluate_threshold(candidates, logic, start, end)]
         else:
-            firings = [{"correlation": item.correlation, "stage_evidence": {key: list(value) for key, value in item.stage_evidence.items()}} for item in evaluate_sequence(candidates, logic)]
+            firings = [{"correlation": item.correlation, "stage_evidence": {key: list(value) for key, value in item.stage_evidence.items()}, "explanation": {"matched": True, "operator": "sequence", "stages": {key: list(value) for key, value in item.stage_evidence.items()}}} for item in evaluate_sequence(candidates, logic)]
         if dry_run:
             return ExecutionResult("dry_run", None, len(candidates), (), tuple(firings), truncated)
         alert_ids: list[int] = []
@@ -130,6 +131,15 @@ def execute_rule(
             )
             db.add(alert)
             db.flush()
+            for stage, stage_ids in firing.get("stage_evidence", {}).items():
+                db.execute(
+                    update(alert_event)
+                    .where(alert_event.c.alert_id == alert.id)
+                    .where(alert_event.c.event_id.in_(
+                        [event.id for event in evidence if event.event_id in stage_ids]
+                    ))
+                    .values(stage=stage)
+                )
             alert_ids.append(alert.id)
         run.status = "completed"
         run.events_scanned = len(candidates)

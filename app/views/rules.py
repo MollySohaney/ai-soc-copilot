@@ -261,7 +261,7 @@ def _render_rule_row(rule) -> None:
                     else:
                         st.info(f"Dry run: {len(result.would_fire)} would-be firing(s); no alerts were created.")
                         for firing in result.would_fire:
-                            st.json(firing)
+                            _render_firing_explanation(firing)
             with col_run:
                 confirmed = st.checkbox("Confirm run", key=f"confirm_rule_{rule.id}")
                 if st.button("Run now", key=f"run_rule_{rule.id}", disabled=not confirmed, type="primary"):
@@ -280,6 +280,21 @@ def _render_rule_row(rule) -> None:
                 st.caption("Recent runs")
                 for run in history.items:
                     st.write(f"{run.status} · {run.window_start.isoformat()} – {run.window_end.isoformat()} · {run.events_scanned} events · {run.alerts_created} alerts")
+
+
+def _render_firing_explanation(firing: dict) -> None:
+    """Render a dry-run firing as concise analyst-readable evidence."""
+    evidence = firing.get("evidence_event_ids", [])
+    if evidence:
+        st.write(f"Matched evidence: {', '.join(evidence)}")
+    for stage, event_ids in firing.get("stage_evidence", {}).items():
+        st.write(f"Stage **{stage}**: {', '.join(event_ids)}")
+    if firing.get("group"):
+        st.write(f"Correlation group: {firing['group']}")
+    if firing.get("correlation"):
+        st.write(f"Correlation: {firing['correlation']}")
+    if firing.get("explanation", {}).get("children"):
+        st.caption(firing["explanation"]["children"])
 
 
 def _render_list() -> None:

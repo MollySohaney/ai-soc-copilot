@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, JSON, String, UniqueConstraint, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
@@ -78,3 +78,15 @@ class DetectionRuleVersion(Base):
     )
 
     rule = relationship("DetectionRule", back_populates="versions")
+
+
+@event.listens_for(DetectionRuleVersion, "before_update")
+def _reject_version_update(mapper, connection, target) -> None:  # noqa: ANN001
+    """Prevent mutation of historical rule logic snapshots."""
+    raise ValueError("DetectionRuleVersion snapshots are immutable")
+
+
+@event.listens_for(DetectionRuleVersion, "before_delete")
+def _reject_version_delete(mapper, connection, target) -> None:  # noqa: ANN001
+    """Prevent deletion of historical rule logic snapshots."""
+    raise ValueError("DetectionRuleVersion snapshots are immutable")

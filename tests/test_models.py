@@ -181,6 +181,22 @@ def test_detection_rule_version_and_run_provenance(session: Session) -> None:
     assert alert.events[0].event_id == "evt-versioned"
 
 
+def test_detection_rule_version_snapshot_is_immutable(session: Session) -> None:
+    """Historical rule snapshots cannot be edited after creation."""
+    rule = DetectionRule(name="Immutable rule", query="legacy", severity=SeverityEnum.LOW)
+    session.add(rule)
+    session.flush()
+    snapshot = DetectionRuleVersion(
+        detection_rule_id=rule.id, version=1, rule_type="single", legacy_query="legacy"
+    )
+    session.add(snapshot)
+    session.commit()
+    snapshot.legacy_query = "changed"
+    with pytest.raises(ValueError, match="immutable"):
+        session.commit()
+    session.rollback()
+
+
 def test_invalid_severity_enum_value_rejected(session: Session) -> None:
     """A severity value outside the enum is rejected when the row is read back."""
     rule = DetectionRule(
