@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -13,13 +13,92 @@ from api.schemas.detection_rule import (
     DetectionRuleCreate,
     DetectionRuleRead,
     DetectionRuleUpdate,
+    DetectionExecutionResponse,
+    DetectionRunRead,
+    PaginatedDetectionRuns,
     PaginatedDetectionRules,
+    RuleExecutionRequest,
+    RuleValidationResponse,
+    ValidateRuleRequest,
 )
+from backend.detection.dsl import parse_logic
+from backend.detection.service import execute_rule
 from db.models.detection_rule import DetectionRule, DetectionRuleVersion
+from db.models.detection_run import DetectionRun
 from db.models.enums import SeverityEnum
 from db.session import get_db
 
 router = APIRouter(prefix="/rules", tags=["rules"])
+
+
+def _execution_window(rule: DetectionRule, request: RuleExecutionRequest) -> tuple[datetime, datetime]:
+    end = (request.window_end or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    start = (request.window_start or end - timedelta(seconds=rule.lookback_window_seconds)).astimezone(timezone.utc)
+    return start, end
+
+
+@router.post("/validate", response_model=RuleValidationResponse)
+def validate_rule(payload: ValidateRuleRequest) -> RuleValidationResponse:
+    """Validate structured rule logic without saving or executing it."""
+    logic = parse_logic(payload.logic)
+    return RuleValidationResponse(valid=True, dsl_version=logic.dsl_version, rule_type=logic.rule_type)
+
+
+def _run_rule(payload: RuleExecutionRequest, db: Session, *, dry_run: bool) -> DetectionExecutionResponse:
+    rule = db.get(DetectionRule, payload.rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Detection rule not found")
+    start, end = _execution_window(rule, payload)
+    try:
+        result = execute_rule(db, rule, window_start=start, window_end=end, dry_run=dry_run)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return DetectionExecutionResponse(
+        status=result.status, run_id=result.run_id, events_scanned=result.events_scanned,
+        alerts_created=list(result.alerts_created), would_fire=list(result.would_fire),
+        truncated=result.truncated, error_detail=result.error_detail,
+    )
+
+
+@router.post("/test", response_model=DetectionExecutionResponse)
+def test_rule(payload: RuleExecutionRequest, db: Session = Depends(get_db)) -> DetectionExecutionResponse:
+    """Dry-run a rule without creating alerts or a persisted detection run."""
+    return _run_rule(payload, db, dry_run=True)
+
+
+@router.post("/execute", response_model=DetectionExecutionResponse)
+def execute_rule_now(payload: RuleExecutionRequest, db: Session = Depends(get_db)) -> DetectionExecutionResponse:
+    """Execute a rule over an explicit or configured lookback window."""
+    return _run_rule(payload, db, dry_run=False)
+
+
+@router.get("/{rule_id}/runs", response_model=PaginatedDetectionRuns)
+def list_detection_runs(
+    rule_id: int, page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> PaginatedDetectionRuns:
+    """List bounded execution history for one rule."""
+    if db.get(DetectionRule, rule_id) is None:
+        raise HTTPException(status_code=404, detail="Detection rule not found")
+    filters = [DetectionRun.detection_rule_id == rule_id]
+    total = db.scalar(select(func.count()).select_from(DetectionRun).where(*filters)) or 0
+    items = db.scalars(
+        select(DetectionRun).where(*filters).order_by(DetectionRun.started_at.desc(), DetectionRun.id.desc())
+        .offset((page - 1) * page_size).limit(page_size)
+    ).all()
+    return PaginatedDetectionRuns(
+        items=items, total=total, page=page, page_size=page_size,
+        total_pages=math.ceil(total / page_size) if total else 0,
+    )
+
+
+@router.get("/{rule_id}/runs/{run_id}", response_model=DetectionRunRead)
+def get_detection_run(rule_id: int, run_id: int, db: Session = Depends(get_db)) -> DetectionRun:
+    """Retrieve one execution record belonging to a rule."""
+    run = db.get(DetectionRun, run_id)
+    if run is None or run.detection_rule_id != rule_id:
+        raise HTTPException(status_code=404, detail="Detection run not found")
+    return run
 
 
 def _find_by_name(db: Session, name: str, *, exclude_id: int | None = None) -> DetectionRule | None:

@@ -44,6 +44,32 @@ def test_create_rule_valid_payload_succeeds(client: TestClient) -> None:
     assert "id" in body
 
 
+def test_validate_rule_accepts_structured_logic(client: TestClient) -> None:
+    response = client.post("/api/v1/rules/validate", json={"logic": {
+        "rule_type": "single",
+        "condition": {"operator": "exists", "field": "hostname"},
+    }})
+    assert response.status_code == 200
+    assert response.json() == {"valid": True, "dsl_version": "1", "rule_type": "single"}
+
+
+def test_validate_rule_rejects_unsafe_logic(client: TestClient) -> None:
+    response = client.post("/api/v1/rules/validate", json={"logic": {
+        "rule_type": "single",
+        "condition": {"operator": "regex", "field": "message", "value": ".*"},
+    }})
+    assert response.status_code == 422
+
+
+def test_test_rule_has_no_persisted_run(client: TestClient, db_session: Session) -> None:
+    rule_id = _rule_id(db_session, "SSH Brute Force Detection")
+    before = db_session.query(DetectionRule).count()
+    response = client.post("/api/v1/rules/test", json={"rule_id": rule_id})
+    assert response.status_code == 200
+    assert response.json()["status"] == "skipped"
+    assert db_session.query(DetectionRule).count() == before
+
+
 def test_create_rule_creates_version_one_snapshot(client: TestClient, db_session: Session) -> None:
     """Creating a structured rule also preserves its version-one logic snapshot."""
     response = client.post(
