@@ -12,6 +12,7 @@ from db.base import Base
 from db.models import Alert, Case, CaseAlert, DetectionRule, Event
 from db.models.alert import alert_event
 from db.seed import seed
+from backend.detection.dsl import parse_logic
 
 
 @pytest.fixture()
@@ -92,3 +93,15 @@ def test_seed_rerun_preserves_deterministic_values(session: Session) -> None:
     chain_alert_after = session.query(Alert).filter_by(external_id="ALERT-0006").one()
     assert chain_alert_after.external_id == external_id_before
     assert chain_alert_after.created_at == created_at_before
+
+
+def test_seeded_detection_pack_contains_valid_structured_logic(session: Session) -> None:
+    """Every seeded rule is executable data validated by the Phase 4 DSL."""
+    seed(session)
+    session.commit()
+    rules = session.query(DetectionRule).all()
+    assert len(rules) == 5
+    assert all(rule.structured_logic for rule in rules)
+    assert {parse_logic(rule.structured_logic).rule_type for rule in rules} == {
+        "single", "threshold", "sequence"
+    }

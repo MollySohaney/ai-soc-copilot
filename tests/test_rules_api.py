@@ -66,7 +66,7 @@ def test_test_rule_has_no_persisted_run(client: TestClient, db_session: Session)
     before = db_session.query(DetectionRule).count()
     response = client.post("/api/v1/rules/test", json={"rule_id": rule_id})
     assert response.status_code == 200
-    assert response.json()["status"] == "skipped"
+    assert response.json()["status"] == "dry_run"
     assert db_session.query(DetectionRule).count() == before
 
 
