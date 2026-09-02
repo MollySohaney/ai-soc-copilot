@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class AIAnalysisRequest(BaseModel):
@@ -41,3 +41,19 @@ class AIAnalysisHistory(BaseModel):
 
     items: list[AIAnalysisRead]
     total: int
+
+
+class AICopilotQuestion(BaseModel):
+    """Represent a bounded case-scoped question with no tool or credential fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, value: str) -> str:
+        value = value.strip()
+        if not value or len(value) > 2000:
+            raise ValueError("question must contain 1-2000 characters")
+        return value

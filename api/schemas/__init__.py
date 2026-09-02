@@ -9,7 +9,7 @@ from api.schemas.alert import (
     AlertUpdate,
     PaginatedAlerts,
 )
-from api.schemas.ai_analysis import AIAnalysisHistory, AIAnalysisRead, AIAnalysisRequest
+from api.schemas.ai_analysis import AIAnalysisHistory, AIAnalysisRead, AIAnalysisRequest, AICopilotQuestion
 from api.schemas.case import CaseCreate, CaseRead
 from api.schemas.case_activity import CaseActivityCreate, CaseActivityRead
 from api.schemas.detection_rule import DetectionRuleCreate, DetectionRuleRead
@@ -30,6 +30,7 @@ __all__ = [
     "AIAnalysisHistory",
     "AIAnalysisRead",
     "AIAnalysisRequest",
+    "AICopilotQuestion",
     "AlertEventsRead",
     "AlertRead",
     "AlertUpdate",

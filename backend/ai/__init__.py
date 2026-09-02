@@ -10,7 +10,7 @@ from backend.ai.provider import (
     UnavailableAIProvider,
     build_ai_provider,
 )
-from backend.ai.triage import AlertTriageOutput, ObservedFact, TriageValidationError, validate_triage_output
+from backend.ai.triage import AlertTriageOutput, CopilotOutput, ObservedFact, TriageValidationError, validate_copilot_output, validate_triage_output
 from backend.ai.prompts import TRIAGE_SYSTEM_INSTRUCTION, build_triage_request
 
 __all__ = [
@@ -23,9 +23,11 @@ __all__ = [
     "UnavailableAIProvider",
     "build_ai_provider",
     "AlertTriageOutput",
+    "CopilotOutput",
     "ObservedFact",
     "TriageValidationError",
     "validate_triage_output",
+    "validate_copilot_output",
     "TRIAGE_SYSTEM_INSTRUCTION",
     "build_triage_request",
 ]
