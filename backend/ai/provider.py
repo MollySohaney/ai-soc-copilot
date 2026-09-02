@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Protocol
@@ -92,7 +94,7 @@ class FakeAIProvider:
 
     def __init__(
         self,
-        content: str = '{"status":"ok"}',
+        content: str | None = None,
         *,
         error: AIProviderError | None = None,
         usage: AIUsage | None = None,
@@ -108,8 +110,21 @@ class FakeAIProvider:
         started = monotonic()
         if self.error:
             raise self.error
+        content = self.content
+        if content is None:
+            evidence_match = re.search(r'"evidence_id":\s*"([^"]+)"', request.user_content)
+            cited_id = evidence_match.group(1) if evidence_match else "evidence-unavailable"
+            content = json.dumps({
+                "summary": "Deterministic fake-provider analysis.",
+                "observed_facts": [{"claim": "Evidence was supplied in the analysis context.", "evidence_ids": [cited_id]}],
+                "assessment": "Review the cited evidence; this result is advisory.",
+                "confidence": 0.5,
+                "missing_information": [],
+                "next_steps": ["Review the linked evidence."],
+                "evidence_refs": [cited_id],
+            })
         return AIResponse(
-            content=self.content,
+            content=content,
             provider=self.provider_name,
             model=request.model,
             latency_ms=max(0, round((monotonic() - started) * 1000)),
