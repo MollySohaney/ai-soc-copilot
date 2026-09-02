@@ -9,6 +9,7 @@ from api.schemas.alert import (
     AlertUpdate,
     PaginatedAlerts,
 )
+from api.schemas.ai_analysis import AIAnalysisHistory, AIAnalysisRead, AIAnalysisRequest
 from api.schemas.case import CaseCreate, CaseRead
 from api.schemas.case_activity import CaseActivityCreate, CaseActivityRead
 from api.schemas.detection_rule import DetectionRuleCreate, DetectionRuleRead
@@ -26,6 +27,9 @@ from api.schemas.ingestion import (
 
 __all__ = [
     "AlertCreate",
+    "AIAnalysisHistory",
+    "AIAnalysisRead",
+    "AIAnalysisRequest",
     "AlertEventsRead",
     "AlertRead",
     "AlertUpdate",
