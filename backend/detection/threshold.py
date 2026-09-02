@@ -37,8 +37,10 @@ def _field(event: object, name: str) -> Any:
 
 def _event_time(event: object) -> datetime:
     value = _field(event, "timestamp")
-    if not isinstance(value, datetime) or value.tzinfo is None:
-        raise ValueError("events must have timezone-aware timestamp values")
+    if not isinstance(value, datetime):
+        raise ValueError("events must have datetime timestamp values")
+    if value.tzinfo is None:  # SQLite returns timezone columns without tzinfo.
+        value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
 
 
