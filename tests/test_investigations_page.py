@@ -113,3 +113,15 @@ def test_update_status_mutates_and_rerenders_new_status(detail_app: AppTest) -> 
     # detail view re-fetched the alert rather than just leaving stale state.
     refreshed_select = detail_app.selectbox(key=f"status_select_{BRUTE_FORCE_ALERT_ID}")
     assert refreshed_select.value == "Investigating"
+
+
+def test_ai_assistance_requires_explicit_action_and_shows_unavailable_state(detail_app: AppTest) -> None:
+    """AI does not run on detail load and handles the disabled provider safely."""
+    assert detail_app.button(key=f"analyze_with_ai_{BRUTE_FORCE_ALERT_ID}")
+    assert any("No AI analysis requested yet" in element.value for element in detail_app.info)
+
+    detail_app.button(key=f"analyze_with_ai_{BRUTE_FORCE_ALERT_ID}").click()
+    detail_app.run(timeout=15)
+
+    assert not detail_app.exception
+    assert any("unavailable" in element.value.lower() for element in detail_app.warning)
