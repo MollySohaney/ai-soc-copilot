@@ -14,3 +14,4 @@ sqlalchemy==2.0.52
 alembic==1.14.0
 psycopg[binary]==3.2.10
 elasticsearch==8.19.3
+argon2-cffi==25.1.0

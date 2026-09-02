@@ -58,7 +58,7 @@ class Alert(Base):
     detection_run_id: Mapped[int | None] = mapped_column(
         ForeignKey("detection_runs.id"), nullable=True
     )
-    fingerprint: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    fingerprint: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rule_logic_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     match_explanation: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
