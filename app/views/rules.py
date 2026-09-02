@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import streamlit as st
 
 from api.schemas.detection_rule import MITRE_TACTICS
@@ -19,6 +21,18 @@ SEVERITY_OPTIONS = ["All"] + [item.value for item in SeverityEnum]
 PAGE_SIZE_OPTIONS = [10, 20, 50]
 LANGUAGE_OPTIONS = ["sigma", "kql", "spl", "yara", "custom"]
 MITRE_TACTIC_OPTIONS = sorted(MITRE_TACTICS)
+RULE_TYPE_OPTIONS = ["single", "threshold", "sequence"]
+
+
+def _logic_from_text(value: str) -> dict | None:
+    """Parse optional editor JSON and show a field-level error on failure."""
+    if not value.strip():
+        return None
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as error:
+        st.error(f"Structured logic must be valid JSON (line {error.lineno}, column {error.colno}).")
+        return None
 
 
 def _render_filters() -> dict:
@@ -54,6 +68,12 @@ def _render_create_form() -> None:
             with col_language:
                 language = st.selectbox("Language", options=LANGUAGE_OPTIONS, key="new_rule_language")
             query = st.text_area("Query", key="new_rule_query")
+            rule_type = st.selectbox("Rule type", options=RULE_TYPE_OPTIONS, key="new_rule_type")
+            structured_logic_text = st.text_area(
+                "Structured logic (JSON, optional)", key="new_rule_logic",
+                placeholder='{"rule_type":"single","condition":{"operator":"exists","field":"hostname"}}',
+            )
+            enabled_for_execution = st.checkbox("Enable for execution", key="new_rule_execution_enabled")
             col_severity, col_risk = st.columns(2)
             with col_severity:
                 severity = st.selectbox(
@@ -82,6 +102,9 @@ def _render_create_form() -> None:
             if not name or not query:
                 st.error("Name and query are required.")
                 return
+            structured_logic = _logic_from_text(structured_logic_text)
+            if structured_logic_text.strip() and structured_logic is None:
+                return
             try:
                 rules_api.create_rule(
                     name=name,
@@ -94,6 +117,9 @@ def _render_create_form() -> None:
                     mitre_tactic=mitre_tactic if mitre_tactic != "(none)" else None,
                     mitre_technique_id=mitre_technique_id or None,
                     mitre_technique_name=mitre_technique_name or None,
+                    structured_logic=structured_logic,
+                    rule_type=rule_type,
+                    enabled_for_execution=enabled_for_execution,
                     client=api_state.get_client(),
                 )
             except ApiClientError as error:
@@ -116,6 +142,15 @@ def _render_edit_form(rule) -> None:
                     "Language", options=LANGUAGE_OPTIONS, index=language_index, key=f"edit_rule_language_{rule.id}"
                 )
             query = st.text_area("Query", value=rule.query, key=f"edit_rule_query_{rule.id}")
+            rule_type_index = RULE_TYPE_OPTIONS.index(rule.rule_type) if rule.rule_type in RULE_TYPE_OPTIONS else 0
+            rule_type = st.selectbox("Rule type", options=RULE_TYPE_OPTIONS, index=rule_type_index, key=f"edit_rule_type_{rule.id}")
+            structured_logic_text = st.text_area(
+                "Structured logic (JSON)", value=json.dumps(rule.structured_logic or {}, indent=2),
+                key=f"edit_rule_logic_{rule.id}",
+            )
+            enabled_for_execution = st.checkbox(
+                "Enable for execution", value=rule.enabled_for_execution, key=f"edit_rule_execution_enabled_{rule.id}"
+            )
             col_severity, col_risk = st.columns(2)
             with col_severity:
                 severity_options = [item.value for item in SeverityEnum]
@@ -154,6 +189,9 @@ def _render_edit_form(rule) -> None:
             submitted = st.form_submit_button("Save Changes", type="primary")
 
         if submitted:
+            structured_logic = _logic_from_text(structured_logic_text)
+            if structured_logic_text.strip() and structured_logic is None:
+                return
             try:
                 rules_api.update_rule(
                     rule.id,
@@ -166,6 +204,9 @@ def _render_edit_form(rule) -> None:
                     mitre_tactic=mitre_tactic if mitre_tactic != "(none)" else None,
                     mitre_technique_id=mitre_technique_id or None,
                     mitre_technique_name=mitre_technique_name or None,
+                    structured_logic=structured_logic,
+                    rule_type=rule_type,
+                    enabled_for_execution=enabled_for_execution,
                     client=api_state.get_client(),
                 )
             except ApiClientError as error:
@@ -209,6 +250,36 @@ def _render_rule_row(rule) -> None:
                     st.rerun()
 
         _render_edit_form(rule)
+        with st.expander("Test, run, and history"):
+            col_test, col_run = st.columns(2)
+            with col_test:
+                if st.button("Test rule", key=f"test_rule_{rule.id}", icon=":material/science:"):
+                    try:
+                        result = rules_api.test_rule(rule.id, client=api_state.get_client())
+                    except ApiClientError as error:
+                        api_state.render_error(error)
+                    else:
+                        st.info(f"Dry run: {len(result.would_fire)} would-be firing(s); no alerts were created.")
+                        for firing in result.would_fire:
+                            st.json(firing)
+            with col_run:
+                confirmed = st.checkbox("Confirm run", key=f"confirm_rule_{rule.id}")
+                if st.button("Run now", key=f"run_rule_{rule.id}", disabled=not confirmed, type="primary"):
+                    try:
+                        result = rules_api.execute_rule(rule.id, client=api_state.get_client())
+                    except ApiClientError as error:
+                        api_state.render_error(error)
+                    else:
+                        st.success(f"Run {result.status}: {len(result.alerts_created)} alert(s) created.")
+                        st.cache_data.clear()
+            try:
+                history = rules_api.list_runs(rule.id, client=api_state.get_client())
+            except ApiClientError as error:
+                api_state.render_error(error)
+            else:
+                st.caption("Recent runs")
+                for run in history.items:
+                    st.write(f"{run.status} · {run.window_start.isoformat()} – {run.window_end.isoformat()} · {run.events_scanned} events · {run.alerts_created} alerts")
 
 
 def _render_list() -> None:
