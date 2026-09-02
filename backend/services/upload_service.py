@@ -34,18 +34,18 @@ class AlertUploadService:
             Upload result for UI consumption.
         """
         try:
-            self._validator.validate(file_name=file_name, content=content)
-            preview = self._parser.parse(file_name=file_name, content=content)
+            safe_name = self._validator.validate(file_name=file_name, content=content)
+            preview = self._parser.parse(file_name=safe_name, content=content)
         except ValueError as error:
             self._logger.warning(
                 "Upload rejected",
-                extra={"file_name": file_name, "reason": str(error)},
+                extra={"error_type": type(error).__name__},
             )
             return UploadResult(is_valid=False, message=str(error))
 
         self._logger.info(
             "Upload processed",
-            extra={"file_name": file_name, "file_type": preview.metadata.get("file_type")},
+            extra={"file_name": safe_name, "file_type": preview.metadata.get("file_type")},
         )
         return UploadResult(
             is_valid=True,

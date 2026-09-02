@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from api.schemas.auth import UserRead
 from db.models.user import RoleEnum
@@ -11,13 +11,17 @@ from db.models.user import RoleEnum
 class AdminUserCreate(BaseModel):
     """Create one local identity without accepting password hashes."""
 
+    model_config = ConfigDict(extra="forbid")
+
     username: str = Field(min_length=1, max_length=64)
-    password: SecretStr
+    password: SecretStr = Field(min_length=12, max_length=1024)
     role: RoleEnum = RoleEnum.VIEWER
 
 
 class AdminUserUpdate(BaseModel):
     """Change only authorization and activation state."""
+
+    model_config = ConfigDict(extra="forbid")
 
     role: RoleEnum | None = None
     is_active: bool | None = None

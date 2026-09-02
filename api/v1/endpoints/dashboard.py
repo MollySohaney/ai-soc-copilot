@@ -18,6 +18,8 @@ from api.schemas.dashboard import (
     SeverityDistributionResponse,
 )
 from api.schemas.alert import AlertRead
+from api.validation import validate_time_window, validate_timestamp
+from config.settings import AppConfig, load_config
 from db.models.alert import Alert
 from db.models.case import Case
 from db.models.enums import AlertStatusEnum, CaseStatusEnum, SeverityEnum
@@ -31,7 +33,7 @@ _OPEN_CASE_STATUSES = (CaseStatusEnum.OPEN, CaseStatusEnum.IN_PROGRESS)
 @router.get("/summary", response_model=DashboardSummary)
 def get_dashboard_summary(
     as_of: datetime | None = None,
-    period_days: int = Query(default=1, ge=1),
+    period_days: int = Query(default=1, ge=1, le=365),
     db: Session = Depends(get_db),
 ) -> DashboardSummary:
     """Compute the aggregate metrics shown on the dashboard summary.
@@ -44,6 +46,7 @@ def get_dashboard_summary(
     Returns:
         The current alert and case counts, plus period-over-period alert change.
     """
+    validate_timestamp(as_of)
     reference = as_of if as_of is not None else datetime.now(timezone.utc)
 
     total_alerts = db.scalar(select(func.count()).select_from(Alert)) or 0
@@ -95,7 +98,7 @@ def get_dashboard_summary(
 @router.get("/alert-trends", response_model=AlertTrendsResponse)
 def get_alert_trends(
     as_of: datetime | None = None,
-    days: int = Query(default=14, ge=1),
+    days: int = Query(default=14, ge=1, le=365),
     db: Session = Depends(get_db),
 ) -> AlertTrendsResponse:
     """Compute the daily alert count over a trailing window of days.
@@ -112,6 +115,7 @@ def get_alert_trends(
     Returns:
         A zero-filled daily alert count for every day in the window.
     """
+    validate_timestamp(as_of)
     reference = as_of if as_of is not None else datetime.now(timezone.utc)
     end_date = reference.date()
     start_date = end_date - timedelta(days=days - 1)
@@ -144,6 +148,7 @@ def get_alert_trends(
 def get_severity_distribution(
     start_time: datetime | None = None,
     end_time: datetime | None = None,
+    config: AppConfig = Depends(load_config),
     db: Session = Depends(get_db),
 ) -> SeverityDistributionResponse:
     """Compute the alert count broken down by severity.
@@ -157,6 +162,9 @@ def get_severity_distribution(
         The alert count for every severity level, sorted low to critical, with
         zero-count entries filled in for severities that had no matches.
     """
+    validate_time_window(
+        start_time, end_time, max_days=config.api_max_query_window_days
+    )
     filters = []
     if start_time is not None:
         filters.append(Alert.first_seen >= start_time)

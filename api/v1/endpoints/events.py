@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.schemas.event import EventRead, PaginatedEvents
+from api.validation import PositiveId
 from db.models.event import Event
 from db.session import get_db
 
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/events", tags=["events"])
 
 @router.get("", response_model=PaginatedEvents)
 def list_events(
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10_000),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> PaginatedEvents:
@@ -53,7 +54,7 @@ def list_events(
 
 
 @router.get("/{event_id}", response_model=EventRead)
-def get_event(event_id: int, db: Session = Depends(get_db)) -> Event:
+def get_event(event_id: PositiveId, db: Session = Depends(get_db)) -> Event:
     """Retrieve a single telemetry event by its primary key.
 
     Args:

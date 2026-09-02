@@ -128,7 +128,7 @@ def test_unsupported_ingestion_provider_returns_404(client: TestClient) -> None:
     response = client.post("/api/v1/ingestion/unknown/test", json={})
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Unsupported ingestion provider: unknown"
+    assert response.json()["error"]["message"] == "Unsupported ingestion provider: unknown"
 
 
 def test_elastic_missing_config_returns_sanitized_400(client: TestClient) -> None:
@@ -148,7 +148,7 @@ def test_elastic_missing_config_returns_sanitized_400(client: TestClient) -> Non
         app.dependency_overrides.pop(load_config, None)
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "ELASTIC_URL is required for Elastic ingestion."
+    assert response.json()["error"]["message"] == "ELASTIC_URL is required for Elastic ingestion."
     assert "should-not-leak" not in response.text
 
 
@@ -179,4 +179,4 @@ def test_sync_enforces_configured_ingestion_limit(client: TestClient) -> None:
         app.dependency_overrides.pop(load_config, None)
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "limit must be less than or equal to 2"
+    assert response.json()["error"]["message"] == "limit must be less than or equal to 2"

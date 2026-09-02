@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from api.dependencies.auth import require_permission
 from api.schemas.admin import AdminUserCreate, AdminUserUpdate, PaginatedUsers
 from api.schemas.auth import UserRead
+from api.validation import PositiveId
 from backend.security.auth import AuthenticatedPrincipal
 from backend.security.rbac import Permission
 from backend.services.user_admin_service import (
@@ -37,7 +38,7 @@ def _service_error(error: Exception) -> HTTPException:
 
 @router.get("", response_model=PaginatedUsers)
 def list_users(
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10_000),
     page_size: int = Query(default=20, ge=1, le=100),
     principal: AuthenticatedPrincipal = Depends(require_permission(Permission.MANAGE_USERS)),
     db: Session = Depends(get_db),
@@ -76,7 +77,7 @@ def create_local_user(
 
 @router.patch("/{user_id}", response_model=UserRead)
 def update_local_user(
-    user_id: int,
+    user_id: PositiveId,
     payload: AdminUserUpdate,
     principal: AuthenticatedPrincipal = Depends(require_permission(Permission.MANAGE_USERS)),
     db: Session = Depends(get_db),
@@ -96,7 +97,7 @@ def update_local_user(
 
 @router.post("/{user_id}/revoke-sessions", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_local_user_sessions(
-    user_id: int,
+    user_id: PositiveId,
     principal: AuthenticatedPrincipal = Depends(require_permission(Permission.MANAGE_USERS)),
     db: Session = Depends(get_db),
 ) -> None:

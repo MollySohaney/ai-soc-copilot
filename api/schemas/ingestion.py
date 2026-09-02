@@ -5,13 +5,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class IngestionConnectionTestRequest(BaseModel):
     """Represent an optional source-specific connection test request."""
 
-    source_name: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    source_name: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._-]+$")
 
 
 class IngestionConnectionTestResponse(BaseModel):
@@ -27,11 +29,20 @@ class IngestionConnectionTestResponse(BaseModel):
 class IngestionSyncRequest(BaseModel):
     """Represent a bounded manual ingestion sync request."""
 
+    model_config = ConfigDict(extra="forbid")
+
     start_time: datetime
     end_time: datetime
     limit: int = Field(default=100, gt=0, le=1000)
     dry_run: bool = False
-    source_name: str | None = None
+    source_name: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._-]+$")
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("timestamps must include a timezone")
+        return value
 
     @model_validator(mode="after")
     def validate_time_window(self) -> "IngestionSyncRequest":

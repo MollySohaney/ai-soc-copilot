@@ -14,7 +14,9 @@ from backend.audit import AuditService
 from backend.security.auth import AuthenticatedPrincipal
 from api.schemas.alert import AlertEventsRead, AlertRead, AlertUpdate, PaginatedAlerts
 from api.schemas.event import EventRead
+from api.validation import PositiveId, validate_time_window
 from backend.security.rbac import Permission
+from config.settings import AppConfig, load_config
 from db.models.alert import Alert, alert_event
 from db.models.enums import AlertStatusEnum, SeverityEnum
 from db.models.event import Event
@@ -27,16 +29,17 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 def list_alerts(
     severity: SeverityEnum | None = None,
     status: AlertStatusEnum | None = None,
-    source: str | None = None,
-    hostname: str | None = None,
-    username: str | None = None,
-    mitre_tactic: str | None = None,
-    mitre_technique_id: str | None = None,
+    source: str | None = Query(default=None, min_length=1, max_length=128),
+    hostname: str | None = Query(default=None, min_length=1, max_length=255),
+    username: str | None = Query(default=None, min_length=1, max_length=255),
+    mitre_tactic: str | None = Query(default=None, min_length=1, max_length=128),
+    mitre_technique_id: str | None = Query(default=None, min_length=1, max_length=32),
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    q: str | None = None,
-    page: int = Query(default=1, ge=1),
+    q: str | None = Query(default=None, min_length=1, max_length=200),
+    page: int = Query(default=1, ge=1, le=10_000),
     page_size: int = Query(default=20, ge=1, le=100),
+    config: AppConfig = Depends(load_config),
     db: Session = Depends(get_db),
 ) -> PaginatedAlerts:
     """List alerts, filtered and paginated, sorted by most recently created first.
@@ -59,6 +62,9 @@ def list_alerts(
     Returns:
         A page of alerts along with pagination metadata.
     """
+    validate_time_window(
+        start_time, end_time, max_days=config.api_max_query_window_days
+    )
     filters = []
     if severity is not None:
         filters.append(Alert.severity == severity)
@@ -79,8 +85,14 @@ def list_alerts(
     if end_time is not None:
         filters.append(Alert.first_seen <= end_time)
     if q is not None:
-        pattern = f"%{q}%"
-        filters.append(or_(Alert.title.ilike(pattern), Alert.description.ilike(pattern)))
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        filters.append(
+            or_(
+                Alert.title.ilike(pattern, escape="\\"),
+                Alert.description.ilike(pattern, escape="\\"),
+            )
+        )
 
     count_stmt = select(func.count()).select_from(Alert).where(*filters)
     total = db.scalar(count_stmt) or 0
@@ -106,7 +118,7 @@ def list_alerts(
 
 
 @router.get("/{alert_id}", response_model=AlertRead)
-def get_alert(alert_id: int, db: Session = Depends(get_db)) -> Alert:
+def get_alert(alert_id: PositiveId, db: Session = Depends(get_db)) -> Alert:
     """Retrieve a single alert by its primary key.
 
     Args:
@@ -130,7 +142,7 @@ def get_alert(alert_id: int, db: Session = Depends(get_db)) -> Alert:
     response_model=AlertRead,
 )
 def update_alert(
-    alert_id: int,
+    alert_id: PositiveId,
     payload: AlertUpdate,
     principal: AuthenticatedPrincipal = Depends(
         require_permission(Permission.MUTATE_INVESTIGATIONS)
@@ -177,7 +189,12 @@ def update_alert(
 
 
 @router.get("/{alert_id}/events", response_model=AlertEventsRead)
-def list_alert_events(alert_id: int, db: Session = Depends(get_db)) -> AlertEventsRead:
+def list_alert_events(
+    alert_id: PositiveId,
+    page: int = Query(default=1, ge=1, le=10_000),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> AlertEventsRead:
     """List the telemetry events linked to an alert.
 
     Args:
@@ -194,15 +211,25 @@ def list_alert_events(alert_id: int, db: Session = Depends(get_db)) -> AlertEven
     if alert is None:
         raise HTTPException(status_code=404, detail="Alert not found")
 
+    total = db.scalar(
+        select(func.count())
+        .select_from(alert_event)
+        .where(alert_event.c.alert_id == alert_id)
+    ) or 0
     stmt = (
         select(Event)
         .join(alert_event, alert_event.c.event_id == Event.id)
         .where(alert_event.c.alert_id == alert_id)
         .order_by(Event.timestamp.desc(), Event.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     events = db.scalars(stmt).all()
 
     return AlertEventsRead(
         items=[EventRead.model_validate(event) for event in events],
-        total=len(events),
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=math.ceil(total / page_size) if total else 0,
     )

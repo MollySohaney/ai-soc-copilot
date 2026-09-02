@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import math
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Query
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_permission
+from api.dependencies.limits import require_abuse_control
 from api.schemas.ai_analysis import AIAnalysisHistory, AIAnalysisRead, AIAnalysisRequest
+from api.validation import PositiveId
 from backend.ai.context import build_evidence_context
 from backend.ai.provider import AIProviderError, build_ai_provider
 from backend.ai.prompts import build_triage_request
@@ -30,9 +36,10 @@ def _analysis_read(record: AIAnalysis) -> AIAnalysisRead:
     "/triage",
     response_model=AIAnalysisRead,
     status_code=201,
+    dependencies=[Depends(require_abuse_control("ai"))],
 )
 def request_triage(
-    alert_id: int,
+    alert_id: PositiveId,
     payload: AIAnalysisRequest,
     principal: AuthenticatedPrincipal = Depends(require_permission(Permission.REQUEST_AI)),
     db: Session = Depends(get_db),
@@ -85,16 +92,34 @@ def request_triage(
 
 
 @router.get("/history", response_model=AIAnalysisHistory)
-def list_triage_history(alert_id: int, db: Session = Depends(get_db)) -> AIAnalysisHistory:
+def list_triage_history(
+    alert_id: PositiveId,
+    page: int = Query(default=1, ge=1, le=10_000),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> AIAnalysisHistory:
     """Read prior analysis attempts without invoking an AI provider."""
     if db.get(Alert, alert_id) is None:
         raise HTTPException(status_code=404, detail="Alert not found")
-    records = db.scalars(select(AIAnalysis).where(AIAnalysis.alert_id == alert_id).order_by(AIAnalysis.created_at, AIAnalysis.id)).all()
-    return AIAnalysisHistory(items=[_analysis_read(record) for record in records], total=len(records))
+    filters = [AIAnalysis.alert_id == alert_id]
+    total = db.scalar(select(func.count()).select_from(AIAnalysis).where(*filters)) or 0
+    records = db.scalars(
+        select(AIAnalysis).where(*filters).order_by(AIAnalysis.created_at, AIAnalysis.id)
+        .offset((page - 1) * page_size).limit(page_size)
+    ).all()
+    return AIAnalysisHistory(
+        items=[_analysis_read(record) for record in records], total=total,
+        page=page, page_size=page_size,
+        total_pages=math.ceil(total / page_size) if total else 0,
+    )
 
 
 @router.get("/analyses/{analysis_id}", response_model=AIAnalysisRead)
-def get_analysis(alert_id: int, analysis_id: int, db: Session = Depends(get_db)) -> AIAnalysis:
+def get_analysis(
+    alert_id: PositiveId,
+    analysis_id: PositiveId,
+    db: Session = Depends(get_db),
+) -> AIAnalysis:
     """Read one analysis only when it belongs to the requested alert."""
     record = db.scalar(select(AIAnalysis).where(AIAnalysis.id == analysis_id, AIAnalysis.alert_id == alert_id))
     if record is None:
