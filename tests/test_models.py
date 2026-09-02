@@ -14,6 +14,7 @@ from db.base import Base
 from db.models import (
     Alert,
     AlertStatusEnum,
+    AIAnalysis,
     Case,
     CaseActivity,
     CaseAlert,
@@ -231,6 +232,92 @@ def test_alert_default_status(session: Session) -> None:
 
     fetched = session.query(Alert).filter_by(title="Default status check").one()
     assert fetched.status == AlertStatusEnum.NEW
+
+
+def test_ai_analysis_persists_alert_scope_and_history(session: Session) -> None:
+    """Multiple attempts remain readable in creation order with their provenance."""
+    alert = Alert(title="AI scoped alert", severity=SeverityEnum.HIGH)
+    session.add(alert)
+    session.flush()
+    session.add_all(
+        [
+            AIAnalysis(
+                analysis_type="triage",
+                alert_id=alert.id,
+                provider="fake",
+                model="fake-model",
+                prompt_version="v1",
+                response_schema_version="v1",
+                output={"summary": "first"},
+                evidence_refs=["event-1"],
+                usage={"total_tokens": 12},
+                status="succeeded",
+            ),
+            AIAnalysis(
+                analysis_type="triage",
+                alert_id=alert.id,
+                provider="fake",
+                model="fake-model",
+                prompt_version="v1",
+                response_schema_version="v1",
+                output=None,
+                evidence_refs=[],
+                status="failed",
+                error_message="Provider unavailable.",
+            ),
+        ]
+    )
+    session.commit()
+
+    records = session.query(AIAnalysis).filter_by(alert_id=alert.id).order_by(AIAnalysis.id).all()
+    assert [record.status for record in records] == ["succeeded", "failed"]
+    assert records[0].evidence_refs == ["event-1"]
+    assert records[0].usage == {"total_tokens": 12}
+
+
+def test_ai_analysis_requires_alert_or_case_scope(session: Session) -> None:
+    """An analysis cannot be persisted without an owning alert or case."""
+    from sqlalchemy.exc import IntegrityError
+
+    session.add(
+        AIAnalysis(
+            analysis_type="triage",
+            provider="fake",
+            model="fake-model",
+            prompt_version="v1",
+            response_schema_version="v1",
+            status="failed",
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_ai_analysis_records_are_immutable(session: Session) -> None:
+    """Updates and deletes cannot rewrite historical analysis attempts."""
+    alert = Alert(title="Immutable AI alert", severity=SeverityEnum.LOW)
+    session.add(alert)
+    session.flush()
+    analysis = AIAnalysis(
+        analysis_type="triage",
+        alert_id=alert.id,
+        provider="fake",
+        model="fake-model",
+        prompt_version="v1",
+        response_schema_version="v1",
+        status="succeeded",
+    )
+    session.add(analysis)
+    session.commit()
+
+    analysis.status = "failed"
+    with pytest.raises(ValueError, match="immutable"):
+        session.commit()
+    session.rollback()
+    session.delete(analysis)
+    with pytest.raises(ValueError, match="immutable"):
+        session.commit()
+    session.rollback()
 
 
 def test_duplicate_alert_external_id_rejected(session: Session) -> None:

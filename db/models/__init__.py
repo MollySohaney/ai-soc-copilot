@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from db.base import Base
 from db.models.alert import Alert, alert_event
+from db.models.ai_analysis import AIAnalysis
 from db.models.case import Case
 from db.models.case_activity import CaseActivity
 from db.models.case_alert import CaseAlert
@@ -16,6 +17,7 @@ from db.models.ingestion import IngestionCheckpoint, IngestionRun
 __all__ = [
     "Base",
     "Alert",
+    "AIAnalysis",
     "alert_event",
     "Case",
     "CaseActivity",
