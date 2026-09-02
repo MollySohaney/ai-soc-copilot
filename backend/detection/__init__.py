@@ -7,5 +7,6 @@ from backend.detection.dsl import (
     parse_logic,
 )
 from backend.detection.matcher import MatchExplanation, MatchResult, match_event
+from backend.detection.threshold import ThresholdMatch, evaluate_threshold
 
-__all__ = ["Condition", "DetectionLogic", "SequenceStage", "parse_logic", "MatchExplanation", "MatchResult", "match_event"]
+__all__ = ["Condition", "DetectionLogic", "SequenceStage", "parse_logic", "MatchExplanation", "MatchResult", "match_event", "ThresholdMatch", "evaluate_threshold"]
