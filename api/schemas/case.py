@@ -41,22 +41,34 @@ class CaseRead(CaseBase):
 class CaseCreateRequest(BaseModel):
     """Represent the payload required to create an investigation case via the API."""
 
-    title: str
-    description: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
     priority: CasePriorityEnum = CasePriorityEnum.MEDIUM
     status: CaseStatusEnum = CaseStatusEnum.OPEN
-    assignee: str | None = None
-    alert_ids: list[int] = Field(default_factory=list)
+    assignee: str | None = Field(default=None, max_length=64)
+    alert_ids: list[int] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_alert_ids(self) -> "CaseCreateRequest":
+        if any(alert_id <= 0 for alert_id in self.alert_ids):
+            raise ValueError("alert_ids must contain positive identifiers")
+        if len(set(self.alert_ids)) != len(self.alert_ids):
+            raise ValueError("alert_ids must not contain duplicates")
+        return self
 
 
 class CaseUpdate(BaseModel):
     """Represent a partial update payload for an investigation case."""
 
-    title: str | None = None
-    description: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
     status: CaseStatusEnum | None = None
     priority: CasePriorityEnum | None = None
-    assignee: str | None = None
+    assignee: str | None = Field(default=None, max_length=64)
 
     @model_validator(mode="before")
     @classmethod
@@ -91,4 +103,14 @@ class PaginatedCases(BaseModel):
 class CaseAlertsAddRequest(BaseModel):
     """Represent the payload required to link alerts to an investigation case."""
 
-    alert_ids: list[int] = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    alert_ids: list[int] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_alert_ids(self) -> "CaseAlertsAddRequest":
+        if any(alert_id <= 0 for alert_id in self.alert_ids):
+            raise ValueError("alert_ids must contain positive identifiers")
+        if len(set(self.alert_ids)) != len(self.alert_ids):
+            raise ValueError("alert_ids must not contain duplicates")
+        return self

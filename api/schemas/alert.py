@@ -57,6 +57,8 @@ class AlertRead(AlertBase):
 class AlertUpdate(BaseModel):
     """Represent a partial update payload for an alert."""
 
+    model_config = ConfigDict(extra="forbid")
+
     status: AlertStatusEnum | None = None
     risk_score: int | None = Field(default=None, ge=0, le=100)
 
@@ -84,3 +86,6 @@ class AlertEventsRead(BaseModel):
 
     items: list[EventRead]
     total: int
+    page: int = 1
+    page_size: int = 20
+    total_pages: int = 0

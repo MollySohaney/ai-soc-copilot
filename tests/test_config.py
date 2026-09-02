@@ -1,5 +1,7 @@
 """Purpose: Verify configuration defaults and normalization."""
 
+import pytest
+
 from config.settings import AppConfig
 
 
@@ -119,3 +121,32 @@ def test_config_rejects_non_positive_ai_limits() -> None:
             pass
         else:
             raise AssertionError(f"Expected AppConfig to reject {field}={value}.")
+
+
+def test_boundary_and_abuse_limits_must_remain_enabled() -> None:
+    fields = (
+        "api_max_body_bytes",
+        "api_max_query_window_days",
+        "abuse_rate_window_seconds",
+        "login_rate_limit",
+        "login_concurrency_limit",
+        "ai_rate_limit",
+        "ai_concurrency_limit",
+        "ingestion_rate_limit",
+        "ingestion_concurrency_limit",
+        "detection_rate_limit",
+        "detection_concurrency_limit",
+    )
+    for field in fields:
+        with pytest.raises(ValueError, match="boundary limits"):
+            AppConfig(**{field: 0})
+
+
+def test_cors_origins_and_upload_extensions_are_narrowly_validated() -> None:
+    for origin in ("*", "file:///tmp/app", "https://user:password@example.com"):
+        with pytest.raises(ValueError, match="explicit HTTP"):
+            AppConfig(frontend_origins=[origin])
+    with pytest.raises(ValueError, match="must not contain duplicates"):
+        AppConfig(frontend_origins=["https://example.com", "https://example.com"])
+    with pytest.raises(ValueError, match="json, csv, or txt"):
+        AppConfig(allowed_upload_types=["html"])

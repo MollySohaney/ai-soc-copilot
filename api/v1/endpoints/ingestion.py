@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_permission
+from api.dependencies.limits import require_abuse_control
 from api.schemas.ingestion import (
     IngestionCheckpointRead,
     IngestionConnectionTestRequest,
@@ -19,6 +20,7 @@ from api.schemas.ingestion import (
     IngestionSyncRequest,
     IngestionSyncResponse,
 )
+from api.validation import ProviderName, validate_time_window
 from backend.ingestion import (
     ElasticIngestionAdapter,
     FixtureIngestionAdapter,
@@ -44,9 +46,10 @@ router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 @router.post(
     "/{provider}/test",
     response_model=IngestionConnectionTestResponse,
+    dependencies=[Depends(require_abuse_control("ingestion"))],
 )
 def test_ingestion_connection(
-    provider: str,
+    provider: ProviderName,
     payload: IngestionConnectionTestRequest | None = None,
     principal: AuthenticatedPrincipal = Depends(
         require_permission(Permission.OPERATE_INTEGRATIONS)
@@ -85,9 +88,10 @@ def test_ingestion_connection(
 @router.post(
     "/{provider}/sync",
     response_model=IngestionSyncResponse,
+    dependencies=[Depends(require_abuse_control("ingestion"))],
 )
 def sync_ingestion(
-    provider: str,
+    provider: ProviderName,
     payload: IngestionSyncRequest,
     principal: AuthenticatedPrincipal = Depends(
         require_permission(Permission.OPERATE_INTEGRATIONS)
@@ -101,6 +105,11 @@ def sync_ingestion(
             status_code=422,
             detail=f"limit must be less than or equal to {config.max_ingestion_sync_limit}",
         )
+    validate_time_window(
+        payload.start_time,
+        payload.end_time,
+        max_days=config.api_max_query_window_days,
+    )
     adapter = _build_adapter(provider, config, source_name=payload.source_name)
     request = IngestionFetchRequest(
         start_time=payload.start_time,
@@ -148,7 +157,7 @@ def get_ingestion_status(db: Session = Depends(get_db)) -> IngestionStatusRespon
     checkpoints = db.scalars(
         select(IngestionCheckpoint).order_by(
             IngestionCheckpoint.updated_at.desc(), IngestionCheckpoint.id.desc()
-        )
+        ).limit(100)
     ).all()
     return IngestionStatusResponse(
         latest_run=IngestionRunRead.model_validate(latest_run) if latest_run else None,
@@ -164,7 +173,7 @@ def get_ingestion_status(db: Session = Depends(get_db)) -> IngestionStatusRespon
     dependencies=[Depends(require_permission(Permission.OPERATE_INTEGRATIONS))],
 )
 def list_ingestion_runs(
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10_000),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> IngestionRunHistory:

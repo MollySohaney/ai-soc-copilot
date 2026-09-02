@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_permission
+from api.dependencies.limits import require_abuse_control
 from api.schemas.ai_analysis import AIAnalysisRead
 from api.schemas.report import ReportDraftOutput
+from api.validation import PositiveId
 from backend.ai.context import build_evidence_context
 from backend.ai.prompts import TRIAGE_SYSTEM_INSTRUCTION
 from backend.ai.provider import AIProviderError, AIRequest, build_ai_provider
@@ -24,9 +26,10 @@ router = APIRouter(prefix="/cases/{case_id}/ai", tags=["ai"])
     "/report",
     response_model=AIAnalysisRead,
     status_code=201,
+    dependencies=[Depends(require_abuse_control("ai"))],
 )
 def draft_report(
-    case_id: int,
+    case_id: PositiveId,
     principal: AuthenticatedPrincipal = Depends(require_permission(Permission.REQUEST_AI)),
     db: Session = Depends(get_db),
 ) -> AIAnalysis:

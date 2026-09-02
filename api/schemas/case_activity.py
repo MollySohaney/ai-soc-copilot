@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CaseActivityBase(BaseModel):
@@ -32,9 +32,11 @@ class CaseActivityRead(CaseActivityBase):
 class CaseActivityCreateRequest(BaseModel):
     """Represent the payload required to create a case activity entry via the API."""
 
-    activity_type: str = "note"
-    message: str
-    author: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    activity_type: str = Field(default="note", min_length=1, max_length=50, pattern=r"^[a-z_]+$")
+    message: str = Field(min_length=1, max_length=4000)
+    author: str | None = Field(default=None, max_length=64)
 
 
 class PaginatedCaseActivities(BaseModel):
@@ -42,3 +44,6 @@ class PaginatedCaseActivities(BaseModel):
 
     items: list[CaseActivityRead]
     total: int
+    page: int = 1
+    page_size: int = 20
+    total_pages: int = 0

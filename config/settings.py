@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
@@ -55,6 +56,17 @@ class AppConfig(BaseModel):
     auth_session_absolute_hours: int = Field(default=8)
     auth_login_max_attempts: int = Field(default=5)
     auth_login_window_seconds: int = Field(default=300)
+    api_max_body_bytes: int = Field(default=1_048_576)
+    api_max_query_window_days: int = Field(default=31)
+    abuse_rate_window_seconds: int = Field(default=60)
+    login_rate_limit: int = Field(default=10)
+    login_concurrency_limit: int = Field(default=2)
+    ai_rate_limit: int = Field(default=10)
+    ai_concurrency_limit: int = Field(default=2)
+    ingestion_rate_limit: int = Field(default=10)
+    ingestion_concurrency_limit: int = Field(default=1)
+    detection_rate_limit: int = Field(default=20)
+    detection_concurrency_limit: int = Field(default=2)
 
     @property
     def database_url(self) -> str:
@@ -98,6 +110,9 @@ class AppConfig(BaseModel):
         normalized = [item.strip().lower() for item in value if item.strip()]
         if not normalized:
             raise ValueError("At least one upload type must be configured.")
+        unsupported = set(normalized) - {"json", "csv", "txt"}
+        if unsupported:
+            raise ValueError("Upload types must be json, csv, or txt.")
         return normalized
 
     @field_validator("max_upload_size_mb")
@@ -167,6 +182,21 @@ class AppConfig(BaseModel):
         normalized = [item.strip() for item in value if item.strip()]
         if not normalized:
             raise ValueError("At least one frontend origin must be configured.")
+        for origin in normalized:
+            parsed = urlsplit(origin)
+            if (
+                origin == "*"
+                or parsed.scheme not in {"http", "https"}
+                or not parsed.netloc
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path not in {"", "/"}
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError("Frontend origins must be explicit HTTP(S) origins.")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("Frontend origins must not contain duplicates.")
         return normalized
 
     @field_validator("ai_provider", "ai_model", "ai_prompt_version", "ai_response_schema_version")
@@ -205,6 +235,26 @@ class AppConfig(BaseModel):
         """Ensure authentication expiry and abuse-control limits are positive."""
         if value <= 0:
             raise ValueError("Authentication limits must be greater than zero.")
+        return value
+
+    @field_validator(
+        "api_max_body_bytes",
+        "api_max_query_window_days",
+        "abuse_rate_window_seconds",
+        "login_rate_limit",
+        "login_concurrency_limit",
+        "ai_rate_limit",
+        "ai_concurrency_limit",
+        "ingestion_rate_limit",
+        "ingestion_concurrency_limit",
+        "detection_rate_limit",
+        "detection_concurrency_limit",
+    )
+    @classmethod
+    def validate_boundary_limits(cls, value: int) -> int:
+        """Ensure request and abuse-control boundaries remain enabled."""
+        if value <= 0:
+            raise ValueError("API boundary limits must be greater than zero.")
         return value
 
     def to_safe_dict(self) -> dict[str, str | int | float | bool | list[str] | None]:
@@ -278,4 +328,15 @@ def load_config() -> AppConfig:
         auth_session_absolute_hours=int(os.getenv("AUTH_SESSION_ABSOLUTE_HOURS", "8")),
         auth_login_max_attempts=int(os.getenv("AUTH_LOGIN_MAX_ATTEMPTS", "5")),
         auth_login_window_seconds=int(os.getenv("AUTH_LOGIN_WINDOW_SECONDS", "300")),
+        api_max_body_bytes=int(os.getenv("API_MAX_BODY_BYTES", "1048576")),
+        api_max_query_window_days=int(os.getenv("API_MAX_QUERY_WINDOW_DAYS", "31")),
+        abuse_rate_window_seconds=int(os.getenv("ABUSE_RATE_WINDOW_SECONDS", "60")),
+        login_rate_limit=int(os.getenv("LOGIN_RATE_LIMIT", "10")),
+        login_concurrency_limit=int(os.getenv("LOGIN_CONCURRENCY_LIMIT", "2")),
+        ai_rate_limit=int(os.getenv("AI_RATE_LIMIT", "10")),
+        ai_concurrency_limit=int(os.getenv("AI_CONCURRENCY_LIMIT", "2")),
+        ingestion_rate_limit=int(os.getenv("INGESTION_RATE_LIMIT", "10")),
+        ingestion_concurrency_limit=int(os.getenv("INGESTION_CONCURRENCY_LIMIT", "1")),
+        detection_rate_limit=int(os.getenv("DETECTION_RATE_LIMIT", "20")),
+        detection_concurrency_limit=int(os.getenv("DETECTION_CONCURRENCY_LIMIT", "2")),
     )

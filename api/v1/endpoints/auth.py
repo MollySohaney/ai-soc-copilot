@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_authenticated_user
+from api.dependencies.limits import require_login_abuse_control
 from api.schemas.auth import LoginRequest, LoginResponse, UserRead
 from backend.security.auth import (
     AuthenticatedPrincipal,
@@ -21,7 +22,11 @@ from db.session import get_db
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    dependencies=[Depends(require_login_abuse_control)],
+)
 def login(
     payload: LoginRequest,
     request: Request,
