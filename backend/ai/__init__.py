@@ -10,6 +10,7 @@ from backend.ai.provider import (
     UnavailableAIProvider,
     build_ai_provider,
 )
+from backend.ai.triage import AlertTriageOutput, ObservedFact, TriageValidationError, validate_triage_output
 
 __all__ = [
     "AIProvider",
@@ -20,4 +21,8 @@ __all__ = [
     "FakeAIProvider",
     "UnavailableAIProvider",
     "build_ai_provider",
+    "AlertTriageOutput",
+    "ObservedFact",
+    "TriageValidationError",
+    "validate_triage_output",
 ]
