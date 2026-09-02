@@ -11,6 +11,7 @@ from backend.ai.provider import (
     build_ai_provider,
 )
 from backend.ai.triage import AlertTriageOutput, ObservedFact, TriageValidationError, validate_triage_output
+from backend.ai.prompts import TRIAGE_SYSTEM_INSTRUCTION, build_triage_request
 
 __all__ = [
     "AIProvider",
@@ -25,4 +26,6 @@ __all__ = [
     "ObservedFact",
     "TriageValidationError",
     "validate_triage_output",
+    "TRIAGE_SYSTEM_INSTRUCTION",
+    "build_triage_request",
 ]
