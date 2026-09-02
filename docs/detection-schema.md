@@ -21,3 +21,9 @@ logic or correlation produce a new fingerprint.
 `DetectionRun` records bounded execution metadata, including its event-time
 window, scan count, result status, and dry-run flag. `alert_event.stage` is
 reserved for labeling evidence belonging to a sequence stage.
+
+Threshold evaluation uses fixed tumbling windows anchored at the requested
+run start. Every window is `[start, end)`: an event at the left boundary is
+included and an event at the right boundary is assigned to the next window
+(or excluded when it equals the run end). Overlapping runs may examine the
+same events; the execution service's fingerprint prevents duplicate alerts.
