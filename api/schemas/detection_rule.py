@@ -166,3 +166,73 @@ class PaginatedDetectionRules(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+class ValidateRuleRequest(BaseModel):
+    """Validate structured logic without persisting it."""
+
+    logic: dict[str, Any]
+
+    @model_validator(mode="after")
+    def validate_logic(self) -> "ValidateRuleRequest":
+        from backend.detection.dsl import parse_logic
+
+        parse_logic(self.logic)
+        return self
+
+
+class RuleExecutionRequest(BaseModel):
+    """Request a bounded rule test or execution."""
+
+    rule_id: int
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+
+
+class RuleValidationResponse(BaseModel):
+    """Successful structured-logic validation response."""
+
+    valid: bool
+    dsl_version: str
+    rule_type: DetectionRuleType
+
+
+class DetectionRunRead(BaseModel):
+    """Detection run summary returned by the API."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    detection_rule_id: int
+    rule_version: int
+    window_start: datetime
+    window_end: datetime
+    started_at: datetime
+    finished_at: datetime | None
+    status: str
+    events_scanned: int
+    alerts_created: int
+    error_detail: str | None
+    dry_run: bool
+
+
+class DetectionExecutionResponse(BaseModel):
+    """Execution result including created alerts and dry-run firings."""
+
+    status: str
+    run_id: int | None
+    events_scanned: int
+    alerts_created: list[int]
+    would_fire: list[dict[str, Any]]
+    truncated: bool
+    error_detail: str | None = None
+
+
+class PaginatedDetectionRuns(BaseModel):
+    """Paginated detection run history."""
+
+    items: list[DetectionRunRead]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
