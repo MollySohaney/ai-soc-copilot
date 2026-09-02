@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from time import sleep as default_sleep
-from typing import Protocol
+from typing import Callable, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -50,7 +50,13 @@ class IngestionOrchestrator:
         self._sleeper = sleeper
         self._logger = get_logger(__name__)
 
-    def run(self, request: IngestionFetchRequest, *, dry_run: bool = False) -> IngestionRunResult:
+    def run(
+        self,
+        request: IngestionFetchRequest,
+        *,
+        dry_run: bool = False,
+        before_commit: Callable[[IngestionRun], None] | None = None,
+    ) -> IngestionRunResult:
         """Run one bounded ingestion page and advance checkpoint after persistence."""
         checkpoint = request.checkpoint or self._load_checkpoint()
         effective_request = request.model_copy(update={"checkpoint": checkpoint})
@@ -113,6 +119,8 @@ class IngestionOrchestrator:
                 page.next_checkpoint.values if page.next_checkpoint is not None else None
             )
             run.completed_at = datetime.now(timezone.utc)
+            if before_commit is not None:
+                before_commit(run)
             self._session.commit()
             self._logger.info(
                 "Ingestion run completed",
@@ -132,7 +140,9 @@ class IngestionOrchestrator:
             )
         except Exception as error:  # noqa: BLE001
             self._session.rollback()
-            self._record_failed_run(run, request, checkpoint, error)
+            self._record_failed_run(
+                run, request, checkpoint, error, before_commit=before_commit
+            )
             self._logger.error(
                 "Ingestion run failed",
                 extra={
@@ -249,6 +259,8 @@ class IngestionOrchestrator:
         request: IngestionFetchRequest,
         checkpoint: IngestionCheckpointState | None,
         error: Exception,
+        *,
+        before_commit: Callable[[IngestionRun], None] | None = None,
     ) -> None:
         failed_run = IngestionRun(
             provider=self._adapter.provider,
@@ -262,6 +274,9 @@ class IngestionOrchestrator:
         )
         self._session.add(failed_run)
         try:
+            self._session.flush()
+            if before_commit is not None:
+                before_commit(failed_run)
             self._session.commit()
         except SQLAlchemyError:
             self._session.rollback()

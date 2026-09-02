@@ -12,6 +12,8 @@ from backend.ai.context import build_evidence_context
 from backend.ai.provider import AIProviderError, build_ai_provider
 from backend.ai.prompts import build_triage_request
 from backend.ai.triage import TriageValidationError, validate_triage_output
+from backend.audit import AuditService
+from backend.security.auth import AuthenticatedPrincipal
 from backend.security.rbac import Permission
 from config.settings import load_config
 from db.models import AIAnalysis, Alert
@@ -28,9 +30,13 @@ def _analysis_read(record: AIAnalysis) -> AIAnalysisRead:
     "/triage",
     response_model=AIAnalysisRead,
     status_code=201,
-    dependencies=[Depends(require_permission(Permission.REQUEST_AI))],
 )
-def request_triage(alert_id: int, payload: AIAnalysisRequest, db: Session = Depends(get_db)) -> AIAnalysis:
+def request_triage(
+    alert_id: int,
+    payload: AIAnalysisRequest,
+    principal: AuthenticatedPrincipal = Depends(require_permission(Permission.REQUEST_AI)),
+    db: Session = Depends(get_db),
+) -> AIAnalysis:
     """Explicitly request one advisory triage attempt for an alert."""
     del payload
     alert = db.get(Alert, alert_id)
@@ -59,6 +65,20 @@ def request_triage(alert_id: int, payload: AIAnalysisRequest, db: Session = Depe
             error_message=getattr(error, "safe_message", str(error)),
         )
     db.add(record)
+    db.flush()
+    AuditService(db).record(
+        action="ai.triage.request",
+        outcome="succeeded" if record.status == "succeeded" else "failed",
+        actor=principal.user,
+        target_type="ai_analysis",
+        target_id=record.id,
+        details={
+            "alert_id": alert_id,
+            "status": record.status,
+            "provider": record.provider,
+            "model": record.model,
+        },
+    )
     db.commit()
     db.refresh(record)
     return record
