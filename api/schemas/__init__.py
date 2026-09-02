@@ -24,6 +24,7 @@ from api.schemas.ingestion import (
     IngestionSyncRequest,
     IngestionSyncResponse,
 )
+from api.schemas.report import ReportDraftOutput
 
 __all__ = [
     "AlertCreate",
@@ -52,4 +53,5 @@ __all__ = [
     "IngestionStatusResponse",
     "IngestionSyncRequest",
     "IngestionSyncResponse",
+    "ReportDraftOutput",
 ]

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import streamlit as st
 
+from api_client import ai as ai_api
+from api_client import cases as cases_api
+from ..components import api_state
+from api_client.http import ApiClientError
 from ..components.layout import (
     render_bullet_list,
     render_data_table,
@@ -98,7 +102,47 @@ def render(config: AppConfig) -> None:
 
     col_header, col_action = st.columns([4, 1])
     with col_action:
-        st.button("Generate Report", type="primary", use_container_width=True, key="generate_report_cta")
+        if st.button("Generate report", type="primary", key="generate_report_cta"):
+            st.session_state["report_generation_requested"] = True
+
+    with st.container(border=True):
+        st.subheader("Evidence-grounded draft")
+        st.caption("Drafts use confirmed content linked to one case. Recommendations are advisory only.")
+        try:
+            cases = cases_api.list_cases(page=1, page_size=100, client=api_state.get_client())
+        except ApiClientError as error:
+            api_state.render_error(error)
+            cases = None
+        if cases and cases.items:
+            selected_case = st.selectbox(
+                "Case",
+                cases.items,
+                format_func=lambda item: f"{item.case_number} — {item.title}",
+                key="report_case_selector",
+            )
+            if st.button("Draft from confirmed case content", key="draft_case_report"):
+                try:
+                    draft = ai_api.draft_report(selected_case.id, client=api_state.get_client())
+                except ApiClientError as error:
+                    api_state.render_error(error)
+                else:
+                    st.session_state["ai_report_draft"] = draft
+            draft = st.session_state.get("ai_report_draft")
+            if draft is not None:
+                if draft.status == "succeeded" and draft.output:
+                    st.markdown("#### Executive summary")
+                    st.write(draft.output.get("executive_summary", ""))
+                    st.markdown("#### Actions recorded")
+                    st.json(draft.output.get("actions_recorded", []))
+                    st.markdown("#### Recommendations")
+                    st.write("\n".join(f"- {item}" for item in draft.output.get("recommendations", [])))
+                    st.caption("Evidence references: " + ", ".join(draft.evidence_refs or []))
+                elif draft.status == "unavailable":
+                    st.warning(draft.error_message or "AI report drafting is unavailable.")
+                else:
+                    st.error(draft.error_message or "AI report drafting failed safely.")
+        else:
+            st.info("No cases are available for an evidence-grounded draft.")
 
     render_metric_grid(REPORT_METRICS, columns=4)
     _render_table()
