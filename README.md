@@ -124,6 +124,9 @@ The following pages remain UI prototypes on mock data and are not wired this pha
 - Analyze Alert
 - Settings
 
+Phase 5 advisory AI setup, safety assumptions, regression commands, and the
+seeded demo runbook are documented in [docs/phase5-regression-gate.md](docs/phase5-regression-gate.md).
+
 Out of scope for this phase (deferred to future phases):
 
 - A detection-rule execution engine
