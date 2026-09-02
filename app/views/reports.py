@@ -8,6 +8,7 @@ from api_client import ai as ai_api
 from api_client import cases as cases_api
 from ..components import api_state
 from api_client.http import ApiClientError
+from backend.security.rbac import Permission
 from ..components.layout import (
     render_bullet_list,
     render_data_table,
@@ -102,7 +103,9 @@ def render(config: AppConfig) -> None:
 
     col_header, col_action = st.columns([4, 1])
     with col_action:
-        if st.button("Generate report", type="primary", key="generate_report_cta"):
+        if api_state.has_permission(Permission.REQUEST_AI) and st.button(
+            "Generate report", type="primary", key="generate_report_cta"
+        ):
             st.session_state["report_generation_requested"] = True
 
     with st.container(border=True):
@@ -120,7 +123,9 @@ def render(config: AppConfig) -> None:
                 format_func=lambda item: f"{item.case_number} — {item.title}",
                 key="report_case_selector",
             )
-            if st.button("Draft from confirmed case content", key="draft_case_report"):
+            if api_state.has_permission(Permission.REQUEST_AI) and st.button(
+                "Draft from confirmed case content", key="draft_case_report"
+            ):
                 try:
                     draft = ai_api.draft_report(selected_case.id, client=api_state.get_client())
                 except ApiClientError as error:

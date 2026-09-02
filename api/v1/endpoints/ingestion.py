@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from api.dependencies.auth import require_permission
 from api.schemas.ingestion import (
     IngestionCheckpointRead,
     IngestionConnectionTestRequest,
@@ -30,6 +31,7 @@ from backend.ingestion import (
     IngestionOrchestrator,
     IngestionTimeoutError,
 )
+from backend.security.rbac import Permission
 from config.settings import AppConfig, load_config
 from db.models import IngestionCheckpoint, IngestionRun
 from db.session import get_db
@@ -37,7 +39,11 @@ from db.session import get_db
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
 
-@router.post("/{provider}/test", response_model=IngestionConnectionTestResponse)
+@router.post(
+    "/{provider}/test",
+    response_model=IngestionConnectionTestResponse,
+    dependencies=[Depends(require_permission(Permission.OPERATE_INTEGRATIONS))],
+)
 def test_ingestion_connection(
     provider: str,
     payload: IngestionConnectionTestRequest | None = None,
@@ -49,7 +55,11 @@ def test_ingestion_connection(
     return IngestionConnectionTestResponse.model_validate(health.model_dump())
 
 
-@router.post("/{provider}/sync", response_model=IngestionSyncResponse)
+@router.post(
+    "/{provider}/sync",
+    response_model=IngestionSyncResponse,
+    dependencies=[Depends(require_permission(Permission.OPERATE_INTEGRATIONS))],
+)
 def sync_ingestion(
     provider: str,
     payload: IngestionSyncRequest,
@@ -81,7 +91,11 @@ def sync_ingestion(
     return IngestionSyncResponse.model_validate(result.model_dump())
 
 
-@router.get("/status", response_model=IngestionStatusResponse)
+@router.get(
+    "/status",
+    response_model=IngestionStatusResponse,
+    dependencies=[Depends(require_permission(Permission.OPERATE_INTEGRATIONS))],
+)
 def get_ingestion_status(db: Session = Depends(get_db)) -> IngestionStatusResponse:
     """Return latest ingestion run and current checkpoints."""
     latest_run = db.scalars(
@@ -100,7 +114,11 @@ def get_ingestion_status(db: Session = Depends(get_db)) -> IngestionStatusRespon
     )
 
 
-@router.get("/runs", response_model=IngestionRunHistory)
+@router.get(
+    "/runs",
+    response_model=IngestionRunHistory,
+    dependencies=[Depends(require_permission(Permission.OPERATE_INTEGRATIONS))],
+)
 def list_ingestion_runs(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),

@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from api.dependencies.auth import require_permission
 from api.schemas.ai_analysis import AICopilotQuestion, AIAnalysisHistory, AIAnalysisRead
 from backend.ai.context import build_evidence_context
 from backend.ai.prompts import TRIAGE_SYSTEM_INSTRUCTION
 from backend.ai.provider import AIProviderError, build_ai_provider
 from backend.ai.provider import AIRequest
 from backend.ai.triage import TriageValidationError, validate_copilot_output
+from backend.security.rbac import Permission
 from config.settings import load_config
 from db.models import AIAnalysis, Case
 from db.session import get_db
@@ -17,7 +19,12 @@ from db.session import get_db
 router = APIRouter(prefix="/cases/{case_id}/ai", tags=["ai"])
 
 
-@router.post("/ask", response_model=AIAnalysisRead, status_code=201)
+@router.post(
+    "/ask",
+    response_model=AIAnalysisRead,
+    status_code=201,
+    dependencies=[Depends(require_permission(Permission.REQUEST_AI))],
+)
 def ask_copilot(case_id: int, payload: AICopilotQuestion, db: Session = Depends(get_db)) -> AIAnalysis:
     """Answer one question using only approved evidence linked to the case."""
     if db.get(Case, case_id) is None:

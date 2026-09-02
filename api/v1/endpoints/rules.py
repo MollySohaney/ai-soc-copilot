@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from api.dependencies.auth import require_permission
 from api.schemas.detection_rule import (
     DetectionRuleCreate,
     DetectionRuleRead,
@@ -23,6 +24,7 @@ from api.schemas.detection_rule import (
 )
 from backend.detection.dsl import parse_logic
 from backend.detection.service import execute_rule
+from backend.security.rbac import Permission
 from db.models.detection_rule import DetectionRule, DetectionRuleVersion
 from db.models.detection_run import DetectionRun
 from db.models.enums import SeverityEnum
@@ -37,7 +39,11 @@ def _execution_window(rule: DetectionRule, request: RuleExecutionRequest) -> tup
     return start, end
 
 
-@router.post("/validate", response_model=RuleValidationResponse)
+@router.post(
+    "/validate",
+    response_model=RuleValidationResponse,
+    dependencies=[Depends(require_permission(Permission.MANAGE_DETECTIONS))],
+)
 def validate_rule(payload: ValidateRuleRequest) -> RuleValidationResponse:
     """Validate structured rule logic without saving or executing it."""
     logic = parse_logic(payload.logic)
@@ -60,13 +66,21 @@ def _run_rule(payload: RuleExecutionRequest, db: Session, *, dry_run: bool) -> D
     )
 
 
-@router.post("/test", response_model=DetectionExecutionResponse)
+@router.post(
+    "/test",
+    response_model=DetectionExecutionResponse,
+    dependencies=[Depends(require_permission(Permission.MANAGE_DETECTIONS))],
+)
 def test_rule(payload: RuleExecutionRequest, db: Session = Depends(get_db)) -> DetectionExecutionResponse:
     """Dry-run a rule without creating alerts or a persisted detection run."""
     return _run_rule(payload, db, dry_run=True)
 
 
-@router.post("/execute", response_model=DetectionExecutionResponse)
+@router.post(
+    "/execute",
+    response_model=DetectionExecutionResponse,
+    dependencies=[Depends(require_permission(Permission.MANAGE_DETECTIONS))],
+)
 def execute_rule_now(payload: RuleExecutionRequest, db: Session = Depends(get_db)) -> DetectionExecutionResponse:
     """Execute a rule over an explicit or configured lookback window."""
     return _run_rule(payload, db, dry_run=False)
@@ -167,7 +181,12 @@ def list_rules(
     )
 
 
-@router.post("", response_model=DetectionRuleRead, status_code=201)
+@router.post(
+    "",
+    response_model=DetectionRuleRead,
+    status_code=201,
+    dependencies=[Depends(require_permission(Permission.MANAGE_DETECTIONS))],
+)
 def create_rule(payload: DetectionRuleCreate, db: Session = Depends(get_db)) -> DetectionRule:
     """Create a detection rule.
 
@@ -223,7 +242,11 @@ def get_rule(rule_id: int, db: Session = Depends(get_db)) -> DetectionRule:
     return rule
 
 
-@router.patch("/{rule_id}", response_model=DetectionRuleRead)
+@router.patch(
+    "/{rule_id}",
+    response_model=DetectionRuleRead,
+    dependencies=[Depends(require_permission(Permission.MANAGE_DETECTIONS))],
+)
 def update_rule(
     rule_id: int, payload: DetectionRuleUpdate, db: Session = Depends(get_db)
 ) -> DetectionRule:

@@ -6,6 +6,8 @@ from html import escape
 
 import streamlit as st
 
+from backend.security.rbac import Permission
+from . import api_state
 from ..data.mock_data import COPILOT_CONVERSATION
 from .layout import render_html_block
 
@@ -35,6 +37,8 @@ def render_copilot_panel() -> None:
     The sidebar remains untouched — the panel is positioned fixed on the right edge
     of the viewport via the ``st-key-*`` CSS hooks defined in theme.css.
     """
+    if not api_state.has_permission(Permission.REQUEST_AI):
+        return
     st.session_state.setdefault("copilot_open", False)
 
     with st.container(key="copilot_trigger"):

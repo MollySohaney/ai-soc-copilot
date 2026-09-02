@@ -10,6 +10,7 @@ import streamlit as st
 from api_client import events as events_api
 from api_client import ingestion as ingestion_api
 from api_client.http import ApiClientError
+from backend.security.rbac import Permission
 
 from ..components import api_state
 from ..components.layout import render_html_block, render_integration_cards
@@ -42,6 +43,9 @@ def render(config: AppConfig) -> None:
     Args:
         config: Application configuration.
     """
+    if not api_state.has_permission(Permission.OPERATE_INTEGRATIONS):
+        st.error("Your role cannot operate integrations.", icon=":material/lock:")
+        return
     connected_count = "1" if config.elastic_url else "0"
     render_shell_start(
         title="Integrations",

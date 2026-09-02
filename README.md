@@ -67,10 +67,12 @@ This command is idempotent: every row is looked up by a natural key before inser
 7. Create a local demo login using the interactive password prompt:
 
 ```bash
-python -m db.bootstrap_user --username demo-analyst
+python -m db.bootstrap_user --username demo-analyst --role analyst
 ```
 
 The command is idempotent and never replaces an existing password. For a disposable demo, `--generate-password` prints a random password once. Automation may supply `DEMO_PASSWORD` through the process environment, but passwords must not be passed as command-line arguments, committed to `.env`, or copied into logs.
+
+Bootstrap the first administrator explicitly with `--role admin`; subsequent user and role management is Admin-only through the API. See [docs/permissions.md](docs/permissions.md) for the server-enforced matrix.
 
 8. Start the Streamlit application and the FastAPI service as two separate local processes:
 
