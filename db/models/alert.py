@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Index, Integer, String, Table
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Index, Integer, JSON, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
@@ -15,6 +15,7 @@ alert_event = Table(
     Base.metadata,
     Column("alert_id", Integer, ForeignKey("alerts.id"), primary_key=True),
     Column("event_id", Integer, ForeignKey("events.id"), primary_key=True),
+    Column("stage", String(100), nullable=True),
 )
 
 
@@ -34,6 +35,9 @@ class Alert(Base):
         Index("ix_alerts_mitre_technique_id", "mitre_technique_id"),
         Index("ix_alerts_first_seen", "first_seen"),
         Index("ix_alerts_last_seen", "last_seen"),
+        Index("ix_alerts_detection_rule_id", "detection_rule_id"),
+        Index("ix_alerts_detection_run_id", "detection_run_id"),
+        Index("ix_alerts_fingerprint", "fingerprint", unique=True),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -47,6 +51,16 @@ class Alert(Base):
     )
     source: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rule_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    detection_rule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("detection_rules.id"), nullable=True
+    )
+    rule_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    detection_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("detection_runs.id"), nullable=True
+    )
+    fingerprint: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    rule_logic_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    match_explanation: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
@@ -66,3 +80,5 @@ class Alert(Base):
     )
 
     events = relationship("Event", secondary=alert_event, backref="alerts")
+    detection_rule = relationship("DetectionRule", back_populates="generated_alerts")
+    detection_run = relationship("DetectionRun", back_populates="alerts")

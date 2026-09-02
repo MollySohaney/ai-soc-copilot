@@ -23,6 +23,12 @@ class AlertBase(BaseModel):
     status: AlertStatusEnum = AlertStatusEnum.NEW
     source: str | None = None
     rule_id: str | None = None
+    detection_rule_id: int | None = None
+    rule_version: int | None = None
+    detection_run_id: int | None = None
+    fingerprint: str | None = None
+    rule_logic_snapshot: dict | None = None
+    match_explanation: dict | None = None
     hostname: str | None = None
     username: str | None = None
     source_ip: str | None = None

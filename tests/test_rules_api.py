@@ -44,6 +44,42 @@ def test_create_rule_valid_payload_succeeds(client: TestClient) -> None:
     assert "id" in body
 
 
+def test_create_rule_creates_version_one_snapshot(client: TestClient, db_session: Session) -> None:
+    """Creating a structured rule also preserves its version-one logic snapshot."""
+    response = client.post(
+        "/api/v1/rules",
+        json=_valid_payload(
+            structured_logic={"field": "event_action", "operator": "equals", "value": "login"},
+            rule_type="single",
+            enabled_for_execution=True,
+        ),
+    )
+
+    assert response.status_code == 201
+    rule = db_session.query(DetectionRule).filter_by(name="New Test Rule").one()
+    assert rule.version == 1
+    assert len(rule.versions) == 1
+    assert rule.versions[0].structured_logic["value"] == "login"
+
+
+def test_patch_rule_logic_bumps_version_and_preserves_snapshot(
+    client: TestClient, db_session: Session
+) -> None:
+    """Changing structured logic creates a new version while retaining the old one."""
+    rule_id = _rule_id(db_session, "Unusual Outbound Network Connection Volume")
+    response = client.patch(
+        f"/api/v1/rules/{rule_id}",
+        json={"structured_logic": {"field": "hostname", "operator": "exists"}},
+    )
+
+    assert response.status_code == 200
+    rule = db_session.get(DetectionRule, rule_id)
+    assert rule is not None
+    assert rule.version == 2
+    assert [snapshot.version for snapshot in rule.versions] == [1, 2]
+    assert rule.versions[0].legacy_query == "event_category:network AND event_action:connection_opened | count() by hostname > 200"
+
+
 def test_create_rule_invalid_language_is_rejected(client: TestClient) -> None:
     """A language outside the allowed set returns 422."""
     response = client.post("/api/v1/rules", json=_valid_payload(language="cobol"))
