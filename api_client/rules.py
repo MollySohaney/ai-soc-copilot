@@ -5,8 +5,11 @@ from __future__ import annotations
 import httpx
 
 from api.schemas.detection_rule import (
+    DetectionExecutionResponse,
     DetectionRuleLanguage,
     DetectionRuleRead,
+    DetectionRunRead,
+    PaginatedDetectionRuns,
     PaginatedDetectionRules,
 )
 from api_client.http import _request, clean_params, get_default_client
@@ -57,6 +60,9 @@ def create_rule(
     mitre_tactic: str | None = None,
     mitre_technique_id: str | None = None,
     mitre_technique_name: str | None = None,
+    structured_logic: dict | None = None,
+    rule_type: str = "single",
+    enabled_for_execution: bool = False,
     client: httpx.Client | None = None,
 ) -> DetectionRuleRead:
     """Create a detection rule.
@@ -91,6 +97,9 @@ def create_rule(
         "mitre_tactic": mitre_tactic,
         "mitre_technique_id": mitre_technique_id,
         "mitre_technique_name": mitre_technique_name,
+        "structured_logic": structured_logic,
+        "rule_type": rule_type,
+        "enabled_for_execution": enabled_for_execution,
     }
     response = _request(client or get_default_client(), "POST", "/rules", json=payload)
     return DetectionRuleRead.model_validate(response.json())
@@ -125,6 +134,9 @@ def update_rule(
     mitre_tactic: str | None = None,
     mitre_technique_id: str | None = None,
     mitre_technique_name: str | None = None,
+    structured_logic: dict | None = None,
+    rule_type: str | None = None,
+    enabled_for_execution: bool | None = None,
     client: httpx.Client | None = None,
 ) -> DetectionRuleRead:
     """Apply a partial update to a detection rule.
@@ -160,8 +172,37 @@ def update_rule(
         mitre_tactic=mitre_tactic,
         mitre_technique_id=mitre_technique_id,
         mitre_technique_name=mitre_technique_name,
+        structured_logic=structured_logic,
+        rule_type=rule_type,
+        enabled_for_execution=enabled_for_execution,
     )
     response = _request(
         client or get_default_client(), "PATCH", f"/rules/{rule_id}", json=payload
     )
     return DetectionRuleRead.model_validate(response.json())
+
+
+def validate_rule(logic: dict, *, client: httpx.Client | None = None) -> dict:
+    """Validate structured rule logic through the API."""
+    response = _request(client or get_default_client(), "POST", "/rules/validate", json={"logic": logic})
+    return response.json()
+
+
+def test_rule(rule_id: int, *, window_start: str | None = None, window_end: str | None = None, client: httpx.Client | None = None) -> DetectionExecutionResponse:
+    """Dry-run a rule and return would-be firings."""
+    payload = clean_params(rule_id=rule_id, window_start=window_start, window_end=window_end)
+    response = _request(client or get_default_client(), "POST", "/rules/test", json=payload)
+    return DetectionExecutionResponse.model_validate(response.json())
+
+
+def execute_rule(rule_id: int, *, window_start: str | None = None, window_end: str | None = None, client: httpx.Client | None = None) -> DetectionExecutionResponse:
+    """Execute a rule through the API."""
+    payload = clean_params(rule_id=rule_id, window_start=window_start, window_end=window_end)
+    response = _request(client or get_default_client(), "POST", "/rules/execute", json=payload)
+    return DetectionExecutionResponse.model_validate(response.json())
+
+
+def list_runs(rule_id: int, *, page: int = 1, page_size: int = 20, client: httpx.Client | None = None) -> PaginatedDetectionRuns:
+    """List execution history for a rule."""
+    response = _request(client or get_default_client(), "GET", f"/rules/{rule_id}/runs", params={"page": page, "page_size": page_size})
+    return PaginatedDetectionRuns.model_validate(response.json())
