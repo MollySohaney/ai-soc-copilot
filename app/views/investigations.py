@@ -10,6 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from api_client import alerts as alerts_api
+from api_client import ai as ai_api
 from api_client import cases as cases_api
 from api_client.http import ApiClientError
 from db.models.enums import AlertStatusEnum, SeverityEnum
@@ -225,6 +226,8 @@ def _render_detail(alert_id: int) -> None:
                 st.success(f"Created case {new_case.case_number}. Opening in Cases…")
                 st.rerun()
 
+    _render_ai_triage(alert)
+
     tab_overview, tab_timeline, tab_evidence, tab_mitre, tab_notes = st.tabs(
         ["Overview", "Timeline", "Evidence", "MITRE", "Notes"]
     )
@@ -310,6 +313,65 @@ def _render_detail(alert_id: int) -> None:
                 )
             st.text_area("Add a note", key="investigation_note_input", placeholder="Document findings, decisions, or next steps...")
             st.button("Add Note", type="primary", key="add_investigation_note")
+
+
+def _render_ai_triage(alert) -> None:  # noqa: ANN001
+    """Render explicit advisory triage, history, citations, and feedback."""
+    with st.container(border=True):
+        st.subheader("AI analyst assistance")
+        st.caption("Advisory only. Deterministic alert evidence remains authoritative.")
+        if st.button("Analyze with AI", type="primary", key=f"analyze_with_ai_{alert.id}", icon=":material/auto_awesome:"):
+            with api_state.loading("Analyzing linked evidence..."):
+                try:
+                    analysis = ai_api.request_triage(alert.id, client=api_state.get_client())
+                except ApiClientError as error:
+                    api_state.render_error(error)
+                else:
+                    st.session_state[f"ai_analysis_{alert.id}"] = analysis
+                    st.rerun()
+
+        try:
+            history = ai_api.get_triage_history(alert.id, client=api_state.get_client())
+        except ApiClientError as error:
+            api_state.render_error(error)
+            return
+        analysis = st.session_state.get(f"ai_analysis_{alert.id}")
+        if analysis is None and history.items:
+            analysis = history.items[-1]
+        if analysis is None:
+            st.info("No AI analysis requested yet. Select Analyze with AI to run an advisory review.")
+            return
+        if analysis.status == "unavailable":
+            st.warning(analysis.error_message or "AI assistance is unavailable or unconfigured.")
+            return
+        if analysis.status != "succeeded" or not analysis.output:
+            st.error(analysis.error_message or "AI analysis failed safely; deterministic workflows are unaffected.")
+            return
+
+        output = analysis.output
+        st.markdown("#### Observed facts")
+        facts = output.get("observed_facts", [])
+        if not facts:
+            st.info("No observed facts were returned.")
+        for fact in facts:
+            st.write(f"- {fact.get('claim', '')}")
+            st.caption("Evidence: " + ", ".join(fact.get("evidence_ids", [])))
+        st.markdown("#### Assessment / hypotheses")
+        st.write(output.get("assessment", "No assessment returned."))
+        st.metric("Confidence", f"{float(output.get('confidence', 0)):.0%}")
+        for label, key in (("Missing information", "missing_information"), ("Next steps", "next_steps")):
+            st.markdown(f"#### {label}")
+            values = output.get(key, [])
+            st.write("\n".join(f"- {value}" for value in values) if values else "None recorded.")
+        st.caption("Evidence references: " + ", ".join(analysis.evidence_refs or []))
+        st.caption(f"Analysis history: {history.total} attempt(s)")
+        feedback = st.selectbox(
+            "Analyst feedback",
+            ["No feedback", "Helpful", "Needs correction"],
+            key=f"ai_feedback_{alert.id}",
+        )
+        if feedback != "No feedback":
+            st.caption("Feedback is recorded for this session only until feedback persistence is added.")
 
 
 def render(config: AppConfig) -> None:
