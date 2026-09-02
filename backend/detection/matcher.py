@@ -84,6 +84,8 @@ def _value(event: object, field: str) -> tuple[Any, bool]:
 
 def _utc(value: datetime) -> datetime:
     """Normalize an aware datetime to UTC."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
 
 
