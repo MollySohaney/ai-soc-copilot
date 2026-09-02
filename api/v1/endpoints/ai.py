@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi import Query
 from sqlalchemy import func
 from sqlalchemy import select
@@ -19,6 +20,7 @@ from backend.ai.provider import AIProviderError, build_ai_provider
 from backend.ai.prompts import build_triage_request
 from backend.ai.triage import TriageValidationError, validate_triage_output
 from backend.audit import AuditService
+from backend.reliability import IdempotencyConflict, IdempotencyReplay, IdempotencyService
 from backend.security.auth import AuthenticatedPrincipal
 from backend.security.rbac import Permission
 from config.settings import load_config
@@ -42,13 +44,27 @@ def request_triage(
     alert_id: PositiveId,
     payload: AIAnalysisRequest,
     principal: AuthenticatedPrincipal = Depends(require_permission(Permission.REQUEST_AI)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
 ) -> AIAnalysis:
     """Explicitly request one advisory triage attempt for an alert."""
-    del payload
     alert = db.get(Alert, alert_id)
     if alert is None:
         raise HTTPException(status_code=404, detail="Alert not found")
+    idem = IdempotencyService(db)
+    reservation = None
+    if idempotency_key is not None:
+        try:
+            reservation = idem.begin(
+                actor_user_id=principal.user.id,
+                operation="ai.triage.request",
+                key=idempotency_key,
+                payload={"alert_id": alert_id, **payload.model_dump(mode="json")},
+            )
+        except IdempotencyConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        if isinstance(reservation, IdempotencyReplay):
+            return JSONResponse(status_code=reservation.status_code, content=reservation.body)  # type: ignore[return-value]
     config = load_config()
     context = build_evidence_context(db, alert_id=alert_id)
     provider = build_ai_provider(config)
@@ -88,6 +104,8 @@ def request_triage(
     )
     db.commit()
     db.refresh(record)
+    if reservation is not None:
+        idem.complete(reservation, status_code=201, body=AIAnalysisRead.model_validate(record).model_dump(mode="json"))
     return record
 
 

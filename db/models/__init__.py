@@ -14,6 +14,7 @@ from db.models.detection_run import DetectionRun
 from db.models.enums import AlertStatusEnum, CasePriorityEnum, CaseStatusEnum, SeverityEnum
 from db.models.event import Event
 from db.models.ingestion import IngestionCheckpoint, IngestionRun
+from db.models.idempotency import IdempotencyRecord
 from db.models.user import AuthSession, RoleEnum, User
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "Event",
     "IngestionCheckpoint",
     "IngestionRun",
+    "IdempotencyRecord",
     "AuthSession",
     "RoleEnum",
     "User",
