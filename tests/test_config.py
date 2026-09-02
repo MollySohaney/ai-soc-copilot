@@ -82,3 +82,23 @@ def test_config_rejects_negative_ingestion_retry_backoff() -> None:
         assert "Ingestion retry backoff" in str(error)
     else:
         raise AssertionError("Expected AppConfig to reject negative retry backoff.")
+
+
+def test_ai_config_defaults_to_disabled_and_redacts_api_key() -> None:
+    """AI is opt-in and its environment credential is never shown in safe config."""
+    config = AppConfig(ai_api_key="ai-secret")
+
+    assert config.ai_enabled is False
+    assert config.to_safe_dict()["ai_api_key"] == "[redacted]"
+    assert "ai-secret" not in config.to_safe_dict().values()
+
+
+def test_config_rejects_non_positive_ai_limits() -> None:
+    """AI timeout and token limits must be positive."""
+    for field, value in (("ai_request_timeout_seconds", 0), ("ai_max_input_tokens", 0), ("ai_max_output_tokens", 0)):
+        try:
+            AppConfig(**{field: value})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Expected AppConfig to reject {field}={value}.")
