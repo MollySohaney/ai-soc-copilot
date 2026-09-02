@@ -54,6 +54,18 @@ class AlertTriageOutput(BaseModel):
         return self
 
 
+class CopilotOutput(BaseModel):
+    """Represent a case-scoped advisory answer with fact citations."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str = Field(min_length=1)
+    observed_facts: list[ObservedFact] = Field(default_factory=list)
+    assessment: str = Field(min_length=1)
+    confidence: float = Field(ge=0, le=1)
+    evidence_refs: list[str] = Field(min_length=1)
+
+
 def validate_triage_output(raw: str | dict[str, Any], valid_evidence_ids: set[str] | frozenset[str]) -> AlertTriageOutput:
     """Parse and validate provider output against the current context IDs."""
     try:
@@ -73,4 +85,19 @@ def validate_triage_output(raw: str | dict[str, Any], valid_evidence_ids: set[st
         raise TriageValidationError(
             f"Provider output cited evidence outside the supplied context: {unsupported}."
         )
+    return result
+
+
+def validate_copilot_output(raw: str | dict[str, Any], valid_evidence_ids: set[str] | frozenset[str]) -> CopilotOutput:
+    """Validate a case answer and all of its evidence references."""
+    try:
+        payload = json.loads(raw) if isinstance(raw, str) else raw
+        result = CopilotOutput.model_validate(payload)
+    except (json.JSONDecodeError, TypeError, ValueError) as error:
+        raise TriageValidationError("Provider output did not match the copilot schema.") from error
+    cited_ids = list(result.evidence_refs)
+    cited_ids.extend(evidence_id for fact in result.observed_facts for evidence_id in fact.evidence_ids)
+    unsupported = sorted(set(cited_ids) - set(valid_evidence_ids))
+    if unsupported:
+        raise TriageValidationError("Provider output cited evidence outside the supplied context.")
     return result
