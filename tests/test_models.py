@@ -251,6 +251,8 @@ def test_ai_analysis_persists_alert_scope_and_history(session: Session) -> None:
                 output={"summary": "first"},
                 evidence_refs=["event-1"],
                 usage={"total_tokens": 12},
+                rate_limit_remaining=99,
+                estimated_cost_usd=0.01,
                 status="succeeded",
             ),
             AIAnalysis(
@@ -273,6 +275,7 @@ def test_ai_analysis_persists_alert_scope_and_history(session: Session) -> None:
     assert [record.status for record in records] == ["succeeded", "failed"]
     assert records[0].evidence_refs == ["event-1"]
     assert records[0].usage == {"total_tokens": 12}
+    assert records[0].rate_limit_remaining == 99
 
 
 def test_ai_analysis_requires_alert_or_case_scope(session: Session) -> None:
