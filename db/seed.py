@@ -106,6 +106,9 @@ def _seed_detection_rules(session: Session) -> dict[str, DetectionRule]:
             mitre_tactic="Credential Access",
             mitre_technique_id="T1110",
             mitre_technique_name="Brute Force",
+            structured_logic={"dsl_version": "1", "rule_type": "threshold", "condition": {"operator": "and", "children": [{"operator": "equals", "field": "event_category", "value": "authentication"}, {"operator": "equals", "field": "event_outcome", "value": "failure"}]}, "group_by": ["source_ip", "username", "hostname"], "window_seconds": 300, "min_count": 5},
+            rule_type="threshold",
+            enabled_for_execution=True,
         ),
         dict(
             name="Valid Account Login Following Failed Attempts",
@@ -119,6 +122,9 @@ def _seed_detection_rules(session: Session) -> dict[str, DetectionRule]:
             mitre_tactic="Initial Access",
             mitre_technique_id="T1078",
             mitre_technique_name="Valid Accounts",
+            structured_logic={"dsl_version": "1", "rule_type": "sequence", "shared_keys": ["source_ip", "username", "hostname"], "max_span_seconds": 600, "stages": [{"label": "failed", "condition": {"operator": "equals", "field": "event_outcome", "value": "failure"}, "min_count": 5}, {"label": "success", "condition": {"operator": "equals", "field": "event_outcome", "value": "success"}}]},
+            rule_type="sequence",
+            enabled_for_execution=True,
         ),
         dict(
             name="Sudo Privilege Escalation",
@@ -132,6 +138,9 @@ def _seed_detection_rules(session: Session) -> dict[str, DetectionRule]:
             mitre_tactic="Privilege Escalation",
             mitre_technique_id="T1548.003",
             mitre_technique_name="Sudo and Sudo Caching",
+            structured_logic={"dsl_version": "1", "rule_type": "single", "condition": {"operator": "and", "children": [{"operator": "equals", "field": "event_category", "value": "process"}, {"operator": "equals", "field": "process_name", "value": "sudo"}]}},
+            rule_type="single",
+            enabled_for_execution=True,
         ),
         dict(
             name="SSH Authorized Keys Modification",
@@ -145,6 +154,9 @@ def _seed_detection_rules(session: Session) -> dict[str, DetectionRule]:
             mitre_tactic="Persistence",
             mitre_technique_id="T1098.004",
             mitre_technique_name="Account Manipulation: SSH Authorized Keys",
+            structured_logic={"dsl_version": "1", "rule_type": "single", "condition": {"operator": "contains", "field": "file_path", "value": ".ssh/authorized_keys"}},
+            rule_type="single",
+            enabled_for_execution=True,
         ),
         dict(
             name="Unusual Outbound Network Connection Volume",
@@ -158,6 +170,9 @@ def _seed_detection_rules(session: Session) -> dict[str, DetectionRule]:
             mitre_tactic=None,
             mitre_technique_id=None,
             mitre_technique_name=None,
+            structured_logic={"dsl_version": "1", "rule_type": "sequence", "shared_keys": ["source_ip", "username", "hostname"], "max_span_seconds": 900, "stages": [{"label": "failed", "condition": {"operator": "equals", "field": "event_outcome", "value": "failure"}, "min_count": 5}, {"label": "success", "condition": {"operator": "equals", "field": "event_outcome", "value": "success"}}, {"label": "privilege_escalation", "condition": {"operator": "equals", "field": "process_name", "value": "sudo"}}, {"label": "persistence", "condition": {"operator": "contains", "field": "file_path", "value": ".ssh/authorized_keys"}}]},
+            rule_type="sequence",
+            enabled_for_execution=True,
         ),
     ]
 
