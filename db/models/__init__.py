@@ -7,7 +7,8 @@ from db.models.alert import Alert, alert_event
 from db.models.case import Case
 from db.models.case_activity import CaseActivity
 from db.models.case_alert import CaseAlert
-from db.models.detection_rule import DetectionRule
+from db.models.detection_rule import DetectionRule, DetectionRuleVersion
+from db.models.detection_run import DetectionRun
 from db.models.enums import AlertStatusEnum, CasePriorityEnum, CaseStatusEnum, SeverityEnum
 from db.models.event import Event
 from db.models.ingestion import IngestionCheckpoint, IngestionRun
@@ -20,6 +21,8 @@ __all__ = [
     "CaseActivity",
     "CaseAlert",
     "DetectionRule",
+    "DetectionRuleVersion",
+    "DetectionRun",
     "AlertStatusEnum",
     "CasePriorityEnum",
     "CaseStatusEnum",

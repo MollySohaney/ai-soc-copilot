@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from db.models.enums import SeverityEnum
 
 DetectionRuleLanguage = Literal["sigma", "kql", "spl", "yara", "custom"]
+DetectionRuleType = Literal["single", "threshold", "sequence"]
 
 MITRE_TECHNIQUE_ID_PATTERN = re.compile(r"^T\d{4}(\.\d{3})?$")
 
@@ -77,6 +78,14 @@ class DetectionRuleBase(BaseModel):
     source: str | None = None
     language: str | None = None
     query: str
+    structured_logic: dict[str, Any] | None = None
+    rule_type: DetectionRuleType = "single"
+    version: int = Field(default=1, ge=1)
+    lookback_window_seconds: int = Field(default=3600, gt=0)
+    schedule_interval_seconds: int | None = Field(default=None, gt=0)
+    max_events_scanned: int = Field(default=10000, gt=0)
+    suppression_window_seconds: int = Field(default=0, ge=0)
+    enabled_for_execution: bool = False
     severity: SeverityEnum
     risk_score: int | None = None
     enabled: bool = True
@@ -105,6 +114,13 @@ class DetectionRuleUpdate(BaseModel):
     source: str | None = None
     language: DetectionRuleLanguage | None = None
     query: str | None = None
+    structured_logic: dict[str, Any] | None = None
+    rule_type: DetectionRuleType | None = None
+    lookback_window_seconds: int | None = Field(default=None, gt=0)
+    schedule_interval_seconds: int | None = Field(default=None, gt=0)
+    max_events_scanned: int | None = Field(default=None, gt=0)
+    suppression_window_seconds: int | None = Field(default=None, ge=0)
+    enabled_for_execution: bool | None = None
     severity: SeverityEnum | None = None
     risk_score: int | None = Field(default=None, ge=0, le=100)
     enabled: bool | None = None

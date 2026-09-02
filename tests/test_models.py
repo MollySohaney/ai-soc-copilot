@@ -20,6 +20,8 @@ from db.models import (
     CasePriorityEnum,
     CaseStatusEnum,
     DetectionRule,
+    DetectionRuleVersion,
+    DetectionRun,
     Event,
     IngestionCheckpoint,
     IngestionRun,
@@ -131,6 +133,52 @@ def test_create_detection_rule(session: Session) -> None:
     fetched = session.query(DetectionRule).filter_by(name="Multiple failed logins").one()
     assert fetched.enabled is True
     assert fetched.severity == SeverityEnum.MEDIUM
+
+
+def test_detection_rule_version_and_run_provenance(session: Session) -> None:
+    """Rules, immutable snapshots, runs, and executable alert provenance compose."""
+    rule = DetectionRule(
+        name="Versioned rule",
+        query="legacy query",
+        structured_logic={"field": "event_action", "operator": "equals", "value": "login"},
+        rule_type="single",
+        severity=SeverityEnum.HIGH,
+        version=2,
+        enabled_for_execution=True,
+    )
+    session.add(rule)
+    session.flush()
+    snapshot = DetectionRuleVersion(
+        detection_rule_id=rule.id,
+        version=rule.version,
+        rule_type=rule.rule_type,
+        structured_logic=rule.structured_logic,
+        legacy_query=rule.query,
+    )
+    run = DetectionRun(
+        detection_rule_id=rule.id,
+        rule_version=rule.version,
+        window_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        window_end=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
+    )
+    event = _make_event("evt-versioned")
+    alert = Alert(
+        title="Versioned alert",
+        severity=SeverityEnum.HIGH,
+        detection_rule=rule,
+        detection_run=run,
+        rule_version=rule.version,
+        fingerprint="rule-2-firing-1",
+        rule_logic_snapshot=rule.structured_logic,
+        events=[event],
+    )
+    session.add_all([snapshot, run, alert])
+    session.commit()
+
+    assert rule.versions[0].structured_logic == snapshot.structured_logic
+    assert alert.detection_rule_id == rule.id
+    assert alert.detection_run.rule_version == 2
+    assert alert.events[0].event_id == "evt-versioned"
 
 
 def test_invalid_severity_enum_value_rejected(session: Session) -> None:

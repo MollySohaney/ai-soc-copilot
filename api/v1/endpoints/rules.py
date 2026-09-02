@@ -15,7 +15,7 @@ from api.schemas.detection_rule import (
     DetectionRuleUpdate,
     PaginatedDetectionRules,
 )
-from db.models.detection_rule import DetectionRule
+from db.models.detection_rule import DetectionRule, DetectionRuleVersion
 from db.models.enums import SeverityEnum
 from db.session import get_db
 
@@ -109,6 +109,16 @@ def create_rule(payload: DetectionRuleCreate, db: Session = Depends(get_db)) -> 
 
     rule = DetectionRule(**payload.model_dump())
     db.add(rule)
+    db.flush()
+    db.add(
+        DetectionRuleVersion(
+            detection_rule_id=rule.id,
+            version=rule.version,
+            rule_type=rule.rule_type,
+            structured_logic=rule.structured_logic,
+            legacy_query=rule.query,
+        )
+    )
     db.commit()
     db.refresh(rule)
     return rule
@@ -164,8 +174,41 @@ def update_rule(
                 status_code=409, detail=f"Detection rule name already exists: {updates['name']!r}"
             )
 
+    logic_changed = any(
+        field in updates for field in ("query", "structured_logic", "rule_type")
+    )
+    previous_version = rule.version
+    previous_snapshot = {
+        "rule_type": rule.rule_type,
+        "structured_logic": rule.structured_logic,
+        "legacy_query": rule.query,
+    }
     for field, value in updates.items():
         setattr(rule, field, value)
+    if logic_changed:
+        if not db.scalar(
+            select(DetectionRuleVersion).where(
+                DetectionRuleVersion.detection_rule_id == rule.id,
+                DetectionRuleVersion.version == rule.version,
+            )
+        ):
+            db.add(
+                DetectionRuleVersion(
+                    detection_rule_id=rule.id,
+                    version=previous_version,
+                    **previous_snapshot,
+                )
+            )
+        rule.version += 1
+        db.add(
+            DetectionRuleVersion(
+                detection_rule_id=rule.id,
+                version=rule.version,
+                rule_type=rule.rule_type,
+                structured_logic=rule.structured_logic,
+                legacy_query=rule.query,
+            )
+        )
     if updates:
         rule.updated_at = datetime.now(timezone.utc)
 
