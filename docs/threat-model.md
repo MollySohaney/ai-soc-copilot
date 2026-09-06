@@ -5,9 +5,9 @@
 PostgreSQL persistence, telemetry ingestion, deterministic detections, and
 optional advisory AI assistance.
 
-This document describes the system as it exists at the start of Phase 6. A
-control marked **planned** is not an existing protection. The implementation
-issues are tracked under [Phase 6 issue #90](https://github.com/MollySohaney/ai-soc-copilot/issues/90).
+This document describes the hardened Phase 6 architecture. Remaining accepted
+risks are explicit below. The implementation issues are tracked under
+[Phase 6 issue #90](https://github.com/MollySohaney/ai-soc-copilot/issues/90).
 
 ## Security objectives
 
@@ -68,10 +68,10 @@ common secret patterns, validate structured results and citations, and persist
 `AIAnalysis` results. The only implemented provider is deterministic fake;
 unsupported or unavailable providers fail closed.
 
-At this snapshot, the API has no authentication, authorization, audit-event
-model, request-wide error contract, or general rate limiter. CORS is restricted
-to configured origins but still permits all methods and headers. These are
-Phase 6 gaps, not compensating controls.
+The API requires opaque authenticated sessions for protected routers, applies
+central RBAC, records security mutations in append-only audit events, returns a
+consistent bounded error contract, and applies identity-aware abuse limits.
+CORS accepts only configured origins, methods, and headers.
 
 ## Assets and classification
 
@@ -82,9 +82,9 @@ Phase 6 gaps, not compensating controls.
 | Cases and analyst work | Case details, assignments, activities, notes | Confidential; actor attribution and ordering matter |
 | Detection content | Rules, structured logic, versions, run windows and results | High integrity; unauthorized changes can suppress or fabricate findings |
 | AI material | Evidence context, questions, outputs, citations, usage/error metadata | Confidential; advisory only; scope and provenance must be preserved |
-| Identity and session material | User records, roles, password hashes, sessions, CSRF tokens | Critical confidentiality and integrity; planned in issue #92 |
+| Identity and session material | User records, roles, password hashes, sessions | Critical confidentiality and integrity; Argon2 hashes and revocable opaque sessions |
 | Integration credentials | PostgreSQL password, Elastic API key/password, future AI API key | Critical confidentiality; environment-only by design |
-| Audit evidence | Actor, action, target, outcome, before/after details | High integrity and retention; planned in issue #94 |
+| Audit evidence | Actor, action, target, outcome, before/after details | High integrity and retention; append-only application records |
 | Configuration | Origins, provider/model, limits, database/endpoint addresses | Integrity-sensitive; some values reveal topology |
 | Logs | Request/provider/job diagnostics and correlation metadata | Potentially confidential; integrity and bounded retention required |
 | Database backups | Complete database copy, including identities and audit history | Critical confidentiality, integrity, and recoverability |
@@ -105,8 +105,8 @@ Phase 6 gaps, not compensating controls.
 | Evidence/content attacker | Controls log messages, raw JSON, filenames, pasted text, or analyst-visible fields | Fully untrusted; content may attempt injection, prompt injection, or resource exhaustion |
 | Dependency/CI publisher | Supplies packages, actions, images, and scanner updates | External supply-chain trust domain |
 
-Role names describe the target Phase 6 model. They do not imply that RBAC is
-already present.
+These roles are enforced by FastAPI permission dependencies and privileged
+service-layer checks. Streamlit visibility is not an authorization boundary.
 
 ## Trust boundaries
 
@@ -126,13 +126,13 @@ already present.
 
 | Entry point | Current behavior and risk |
 | --- | --- |
-| `GET /api/v1/health` | Unauthenticated process health; currently returns only `{"status":"ok"}` |
-| Events, alerts, dashboard reads | Paginated/filterable SOC data; currently anonymous |
-| `PATCH /alerts/{id}` | Changes alert state; currently anonymous and unaudited |
-| Case create/update/link/unlink/activity routes | Mutate investigation records; currently anonymous and unaudited |
-| Detection rule validate/test/execute/create/update and run history | Accept rule logic or invoke potentially expensive database scans; currently anonymous |
-| Ingestion connection test/sync/status/history | Reaches configured providers and can persist telemetry/checkpoints; currently anonymous |
-| AI triage, case Q&A, report, and history routes | Build sensitive context, invoke configured provider, and persist results; currently anonymous |
+| `GET /api/v1/health` and `/ready` | Unauthenticated liveness and bounded database readiness; no sensitive details |
+| Events, alerts, dashboard reads | Authenticated, paginated/filterable SOC data |
+| `PATCH /alerts/{id}` | Analyst/Admin mutation with atomic audit attribution |
+| Case create/update/link/unlink/activity routes | Analyst/Admin transactionally audited investigation mutations |
+| Detection rule validate/test/execute/create/update and run history | Detection Engineer/Admin operations with validation, abuse controls, and audit |
+| Ingestion connection test/sync/status/history | Admin-only bounded provider operations with safe failure mapping |
+| AI triage, case Q&A, report, and history routes | Analyst/Admin, evidence-scoped, rate-limited, idempotent, audited advisory AI |
 | Streamlit forms and navigation | Provide friendly access to the same API actions; UI state is not a security boundary |
 | Analyze Alert upload/paste | Processes attacker-controlled filenames and JSON/CSV/text in the Streamlit process |
 | Report/export controls | Some controls remain prototypes; any completed export becomes a file/content boundary |
@@ -144,10 +144,11 @@ already present.
 
 ## Threats, mitigations, and verification
 
-Status values are **existing**, **partial**, or **planned**. Partial controls do
-not satisfy the Phase 6 definition of done on their own.
+The issue references below preserve implementation traceability. Controls
+described as planned in the original snapshot are implemented as of this
+revision unless explicitly retained under accepted risks.
 
-| ID | Threat and impact | Existing/partial mitigation | Planned mitigation | Verification |
+| ID | Threat and impact | Baseline mitigation | Phase 6 mitigation | Verification |
 | --- | --- | --- | --- | --- |
 | T01 | Anonymous access or broken object/function authorization exposes or mutates SOC data | Layer separation only; no auth at this snapshot | Authentication in #92; centralized RBAC and negative endpoint/service tests in #93 | Anonymous `401` tests; per-role allow/deny matrix; direct service bypass tests |
 | T02 | Password guessing, user enumeration, session theft/fixation, stale sessions, or unsafe demo credentials compromise an identity | No credentials/sessions exist yet | Adaptive hashing, non-enumerating login, secure idle/absolute expiry, logout/revocation, safe bootstrap, login abuse controls in #92/#95 | Hash/session unit tests; brute-force and expiry tests; repository/log secret scan |
@@ -198,18 +199,19 @@ resolved.
 | Direct database administrators can alter audit rows | PostgreSQL administration is an explicitly trusted operator boundary. Application APIs will be append-only and backups provide supporting evidence, but no external immutable/WORM sink is planned. | Project maintainer | Before compliance use or untrusted DBA access, or 2026-12-01 |
 | In-process/local rate-limit storage may not coordinate multiple API workers | A single-process local deployment can enforce reasonable abuse controls without new infrastructure. Document and refuse to imply cluster-wide enforcement. | API owner | Before adding a second worker/replica or public exposure |
 | Only the deterministic fake AI provider is implemented/tested | AI is disabled by default and deterministic workflows do not depend on it. A real provider requires a fresh privacy, retention, regional, timeout, and cost review. | AI integration owner | Before configuring any real provider |
-| Backups rely on operator-controlled filesystem protection | The portfolio deployment does not introduce a backup service or key-management system. Step #98 will document permissions/encryption expectations and prove restore using disposable data. | Deployment operator | Before storing non-demo data, or 2026-12-01 |
+| Backups rely on operator-controlled filesystem protection | The portfolio deployment does not introduce a backup service or key-management system. The recovery runbook documents permissions/encryption expectations and records a disposable restore proof. | Deployment operator | Before storing non-demo data, or 2026-12-01 |
 | Uploaded/raw telemetry can contain sensitive data not recognized by pattern redaction | Pattern redaction reduces common leakage but is not a data-loss-prevention guarantee. Access is restricted, context is bounded/scoped, and real AI egress remains disabled by default. | Security owner | Before real-provider enablement or ingesting production telemetry |
 | Single local PostgreSQL instance has no automatic failover | Availability goals for the portfolio demo are recovery-based, not high availability. Health/readiness and tested backup/restore are the compensating controls. | Deployment operator | Before setting an uptime SLO or multi-user production use |
 
 ## Validation and maintenance
 
-Step #99 owns the full security regression and must record the role matrix,
-migrations/environment variables, CI checks, canary secret scan, provider outage
-tests, prompt-injection tests, backup/restore proof, authorized Analyst workflow,
-and any remaining accepted risks.
+The Phase 6 regression gate records the role matrix, migrations/environment
+variables, CI checks, canary secret scan, provider outage tests,
+prompt-injection tests, backup/restore proof, authorized Analyst workflow, and
+remaining accepted risks.
 
 Update this threat model whenever a trust boundary changes; a real AI provider,
 remote deployment, new integration, new upload/export format, additional API
 worker, external identity provider, secret manager, or immutable audit sink is
 introduced; or an accepted-risk review trigger is reached.
+

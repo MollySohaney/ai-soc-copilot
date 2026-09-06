@@ -124,13 +124,12 @@ def test_every_non_public_api_operation_requires_authentication(
         ("POST", "/api/v1/auth/login"),
     }
     checked: set[tuple[str, str]] = set()
-    for route in app.routes:
-        if not route.path.startswith("/api/v1"):
-            continue
-        path = re.sub(r"\{[^}]+\}", "1", route.path)
-        for method in route.methods or set():
-            operation = (method, route.path)
-            if method in {"HEAD", "OPTIONS"} or operation in public_operations:
+    for route_path, operations in app.openapi()["paths"].items():
+        path = re.sub(r"\{[^}]+\}", "1", route_path)
+        for method_name in operations:
+            method = method_name.upper()
+            operation = (method, route_path)
+            if operation in public_operations:
                 continue
             response = anonymous_client.request(method, path, json={})
             assert response.status_code == 401, operation

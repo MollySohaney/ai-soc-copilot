@@ -22,6 +22,8 @@ code without write permissions, have timeouts, and cancel superseded runs. Actio
 checkout/setup-python references are immutable commit SHAs. Gitleaks is pinned to
 the maintained major action line because its release commit is managed upstream;
 renovate/dependabot should surface action upgrades for review.
+The secret-scan checkout fetches full history so pull-request parent revisions
+are available and the scanner cannot silently degrade to a zero-byte scan.
 
 Local equivalents:
 
