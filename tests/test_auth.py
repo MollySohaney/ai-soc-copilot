@@ -120,6 +120,7 @@ def test_every_non_public_api_operation_requires_authentication(
     """Route additions cannot accidentally bypass the shared protected router."""
     public_operations = {
         ("GET", "/api/v1/health"),
+        ("GET", "/api/v1/ready"),
         ("POST", "/api/v1/auth/login"),
     }
     checked: set[tuple[str, str]] = set()

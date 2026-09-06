@@ -5,8 +5,9 @@ from __future__ import annotations
 import math
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import JSONResponse
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_permission
@@ -28,6 +29,7 @@ from api.schemas.case_activity import (
 )
 from api.validation import PositiveId
 from backend.security.rbac import Permission
+from backend.reliability import IdempotencyConflict, IdempotencyReplay, IdempotencyService
 from db.models.alert import Alert
 from db.models.case import Case
 from db.models.case_activity import CaseActivity
@@ -65,6 +67,8 @@ def _generate_case_number(db: Session) -> str:
     """
     year = datetime.now(timezone.utc).year
     prefix = f"CASE-{year}-"
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        db.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": year})
     stmt = (
         select(Case.case_number)
         .where(Case.case_number.like(f"{prefix}%"))
@@ -143,6 +147,7 @@ def create_case(
     principal: AuthenticatedPrincipal = Depends(
         require_permission(Permission.MUTATE_INVESTIGATIONS)
     ),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
 ) -> CaseDetail:
     """Create an investigation case, optionally linking it to existing alerts.
@@ -157,6 +162,20 @@ def create_case(
     Raises:
         HTTPException: If any of the given alert ids do not exist.
     """
+    idem = IdempotencyService(db)
+    reservation = None
+    if idempotency_key is not None:
+        try:
+            reservation = idem.begin(
+                actor_user_id=principal.user.id,
+                operation="case.create",
+                key=idempotency_key,
+                payload=payload.model_dump(mode="json"),
+            )
+        except IdempotencyConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        if isinstance(reservation, IdempotencyReplay):
+            return JSONResponse(status_code=reservation.status_code, content=reservation.body)  # type: ignore[return-value]
     alert_ids = list(dict.fromkeys(payload.alert_ids))
     if alert_ids:
         found_ids = set(db.scalars(select(Alert.id).where(Alert.id.in_(alert_ids))).all())
@@ -203,7 +222,10 @@ def create_case(
 
     db.commit()
     db.refresh(case)
-    return _to_case_detail(case)
+    result = _to_case_detail(case)
+    if reservation is not None:
+        idem.complete(reservation, status_code=201, body=CaseDetail.model_validate(result).model_dump(mode="json"))
+    return result
 
 
 @router.get("/{case_id}", response_model=CaseDetail)
