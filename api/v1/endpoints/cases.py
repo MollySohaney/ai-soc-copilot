@@ -26,6 +26,7 @@ from api.schemas.case_activity import (
     CaseActivityRead,
     PaginatedCaseActivities,
 )
+from api.validation import PositiveId
 from backend.security.rbac import Permission
 from db.models.alert import Alert
 from db.models.case import Case
@@ -83,8 +84,8 @@ def _generate_case_number(db: Session) -> str:
 def list_cases(
     status: CaseStatusEnum | None = None,
     priority: CasePriorityEnum | None = None,
-    assignee: str | None = None,
-    page: int = Query(default=1, ge=1),
+    assignee: str | None = Query(default=None, min_length=1, max_length=64),
+    page: int = Query(default=1, ge=1, le=10_000),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> PaginatedCases:
@@ -206,7 +207,7 @@ def create_case(
 
 
 @router.get("/{case_id}", response_model=CaseDetail)
-def get_case(case_id: int, db: Session = Depends(get_db)) -> CaseDetail:
+def get_case(case_id: PositiveId, db: Session = Depends(get_db)) -> CaseDetail:
     """Retrieve a single investigation case by its primary key.
 
     Args:
@@ -230,7 +231,7 @@ def get_case(case_id: int, db: Session = Depends(get_db)) -> CaseDetail:
     response_model=CaseDetail,
 )
 def update_case(
-    case_id: int,
+    case_id: PositiveId,
     payload: CaseUpdate,
     principal: AuthenticatedPrincipal = Depends(
         require_permission(Permission.MUTATE_INVESTIGATIONS)
@@ -318,7 +319,7 @@ def update_case(
     response_model=CaseDetail,
 )
 def add_case_alerts(
-    case_id: int,
+    case_id: PositiveId,
     payload: CaseAlertsAddRequest,
     principal: AuthenticatedPrincipal = Depends(
         require_permission(Permission.MUTATE_INVESTIGATIONS)
@@ -389,8 +390,8 @@ def add_case_alerts(
     response_model=CaseDetail,
 )
 def remove_case_alert(
-    case_id: int,
-    alert_id: int,
+    case_id: PositiveId,
+    alert_id: PositiveId,
     principal: AuthenticatedPrincipal = Depends(
         require_permission(Permission.MUTATE_INVESTIGATIONS)
     ),
@@ -444,7 +445,12 @@ def remove_case_alert(
 
 
 @router.get("/{case_id}/activities", response_model=PaginatedCaseActivities)
-def list_case_activities(case_id: int, db: Session = Depends(get_db)) -> PaginatedCaseActivities:
+def list_case_activities(
+    case_id: PositiveId,
+    page: int = Query(default=1, ge=1, le=10_000),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> PaginatedCaseActivities:
     """List the activity timeline entries for a case, oldest first.
 
     Args:
@@ -461,16 +467,26 @@ def list_case_activities(case_id: int, db: Session = Depends(get_db)) -> Paginat
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
+    total = db.scalar(
+        select(func.count())
+        .select_from(CaseActivity)
+        .where(CaseActivity.case_id == case_id)
+    ) or 0
     stmt = (
         select(CaseActivity)
         .where(CaseActivity.case_id == case_id)
         .order_by(CaseActivity.created_at.asc(), CaseActivity.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     activities = db.scalars(stmt).all()
 
     return PaginatedCaseActivities(
         items=[CaseActivityRead.model_validate(activity) for activity in activities],
-        total=len(activities),
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=math.ceil(total / page_size) if total else 0,
     )
 
 
@@ -480,7 +496,7 @@ def list_case_activities(case_id: int, db: Session = Depends(get_db)) -> Paginat
     status_code=201,
 )
 def create_case_activity(
-    case_id: int,
+    case_id: PositiveId,
     payload: CaseActivityCreateRequest,
     principal: AuthenticatedPrincipal = Depends(
         require_permission(Permission.MUTATE_INVESTIGATIONS)

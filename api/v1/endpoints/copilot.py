@@ -1,11 +1,15 @@
 """Purpose: Expose strictly case-scoped advisory Q&A."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+import math
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_permission
+from api.dependencies.limits import require_abuse_control
 from api.schemas.ai_analysis import AICopilotQuestion, AIAnalysisHistory, AIAnalysisRead
+from api.validation import PositiveId
 from backend.ai.context import build_evidence_context
 from backend.ai.prompts import TRIAGE_SYSTEM_INSTRUCTION
 from backend.ai.provider import AIProviderError, build_ai_provider
@@ -25,9 +29,10 @@ router = APIRouter(prefix="/cases/{case_id}/ai", tags=["ai"])
     "/ask",
     response_model=AIAnalysisRead,
     status_code=201,
+    dependencies=[Depends(require_abuse_control("ai"))],
 )
 def ask_copilot(
-    case_id: int,
+    case_id: PositiveId,
     payload: AICopilotQuestion,
     principal: AuthenticatedPrincipal = Depends(require_permission(Permission.REQUEST_AI)),
     db: Session = Depends(get_db),
@@ -82,9 +87,26 @@ def ask_copilot(
 
 
 @router.get("/history", response_model=AIAnalysisHistory)
-def copilot_history(case_id: int, db: Session = Depends(get_db)) -> AIAnalysisHistory:
+def copilot_history(
+    case_id: PositiveId,
+    page: int = Query(default=1, ge=1, le=10_000),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> AIAnalysisHistory:
     """Read Q&A history for one case without invoking the provider."""
     if db.get(Case, case_id) is None:
         raise HTTPException(status_code=404, detail="Case not found")
-    records = db.scalars(select(AIAnalysis).where(AIAnalysis.case_id == case_id, AIAnalysis.analysis_type == "ask_copilot").order_by(AIAnalysis.created_at, AIAnalysis.id)).all()
-    return AIAnalysisHistory(items=[AIAnalysisRead.model_validate(record) for record in records], total=len(records))
+    filters = [
+        AIAnalysis.case_id == case_id,
+        AIAnalysis.analysis_type == "ask_copilot",
+    ]
+    total = db.scalar(select(func.count()).select_from(AIAnalysis).where(*filters)) or 0
+    records = db.scalars(
+        select(AIAnalysis).where(*filters).order_by(AIAnalysis.created_at, AIAnalysis.id)
+        .offset((page - 1) * page_size).limit(page_size)
+    ).all()
+    return AIAnalysisHistory(
+        items=[AIAnalysisRead.model_validate(record) for record in records], total=total,
+        page=page, page_size=page_size,
+        total_pages=math.ceil(total / page_size) if total else 0,
+    )

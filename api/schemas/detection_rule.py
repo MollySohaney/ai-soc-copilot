@@ -73,18 +73,18 @@ def _validate_mitre_technique_id(value: str | None) -> str | None:
 class DetectionRuleBase(BaseModel):
     """Represent the shared fields for a detection rule."""
 
-    name: str
-    description: str | None = None
-    source: str | None = None
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
+    source: str | None = Field(default=None, max_length=128)
     language: str | None = None
-    query: str
+    query: str = Field(max_length=10_000)
     structured_logic: dict[str, Any] | None = None
     rule_type: DetectionRuleType = "single"
     version: int = Field(default=1, ge=1)
-    lookback_window_seconds: int = Field(default=3600, gt=0)
-    schedule_interval_seconds: int | None = Field(default=None, gt=0)
-    max_events_scanned: int = Field(default=10000, gt=0)
-    suppression_window_seconds: int = Field(default=0, ge=0)
+    lookback_window_seconds: int = Field(default=3600, gt=0, le=2_678_400)
+    schedule_interval_seconds: int | None = Field(default=None, gt=0, le=2_678_400)
+    max_events_scanned: int = Field(default=10000, gt=0, le=100_000)
+    suppression_window_seconds: int = Field(default=0, ge=0, le=2_678_400)
     enabled_for_execution: bool = False
     severity: SeverityEnum
     risk_score: int | None = None
@@ -96,6 +96,8 @@ class DetectionRuleBase(BaseModel):
 
 class DetectionRuleCreate(DetectionRuleBase):
     """Represent the payload required to create a detection rule."""
+
+    model_config = ConfigDict(extra="forbid")
 
     language: DetectionRuleLanguage
     risk_score: int | None = Field(default=None, ge=0, le=100)
@@ -109,17 +111,19 @@ class DetectionRuleCreate(DetectionRuleBase):
 class DetectionRuleUpdate(BaseModel):
     """Represent a partial update payload for a detection rule."""
 
-    name: str | None = None
-    description: str | None = None
-    source: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
+    source: str | None = Field(default=None, max_length=128)
     language: DetectionRuleLanguage | None = None
-    query: str | None = None
+    query: str | None = Field(default=None, max_length=10_000)
     structured_logic: dict[str, Any] | None = None
     rule_type: DetectionRuleType | None = None
-    lookback_window_seconds: int | None = Field(default=None, gt=0)
-    schedule_interval_seconds: int | None = Field(default=None, gt=0)
-    max_events_scanned: int | None = Field(default=None, gt=0)
-    suppression_window_seconds: int | None = Field(default=None, ge=0)
+    lookback_window_seconds: int | None = Field(default=None, gt=0, le=2_678_400)
+    schedule_interval_seconds: int | None = Field(default=None, gt=0, le=2_678_400)
+    max_events_scanned: int | None = Field(default=None, gt=0, le=100_000)
+    suppression_window_seconds: int | None = Field(default=None, ge=0, le=2_678_400)
     enabled_for_execution: bool | None = None
     severity: SeverityEnum | None = None
     risk_score: int | None = Field(default=None, ge=0, le=100)
@@ -171,6 +175,8 @@ class PaginatedDetectionRules(BaseModel):
 class ValidateRuleRequest(BaseModel):
     """Validate structured logic without persisting it."""
 
+    model_config = ConfigDict(extra="forbid")
+
     logic: dict[str, Any]
 
     @model_validator(mode="after")
@@ -184,9 +190,18 @@ class ValidateRuleRequest(BaseModel):
 class RuleExecutionRequest(BaseModel):
     """Request a bounded rule test or execution."""
 
-    rule_id: int
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: int = Field(gt=0)
     window_start: datetime | None = None
     window_end: datetime | None = None
+
+    @field_validator("window_start", "window_end")
+    @classmethod
+    def require_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            raise ValueError("execution timestamps must include a timezone")
+        return value
 
 
 class RuleValidationResponse(BaseModel):

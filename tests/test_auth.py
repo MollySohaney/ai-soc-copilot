@@ -91,16 +91,15 @@ def test_invalid_username_and_password_share_generic_failure(
     )
 
     assert wrong_password.status_code == missing_user.status_code == 401
-    assert wrong_password.json() == missing_user.json() == {
-        "detail": "Invalid username or password."
-    }
+    assert wrong_password.json()["error"]["message"] == "Invalid username or password."
+    assert missing_user.json()["error"]["message"] == "Invalid username or password."
 
     oversized_secret = "secret-canary-" + ("x" * 1100)
     oversized = anonymous_client.post(
         "/api/v1/auth/login",
         json={"username": user.username, "password": oversized_secret},
     )
-    assert oversized.status_code == 401
+    assert oversized.status_code == 422
     assert oversized_secret not in oversized.text
 
 
@@ -111,7 +110,7 @@ def test_anonymous_users_can_reach_health_but_not_protected_data(
     assert anonymous_client.get("/api/v1/health").status_code == 200
     response = anonymous_client.get("/api/v1/alerts")
     assert response.status_code == 401
-    assert response.json() == {"detail": "Authentication required."}
+    assert response.json()["error"]["message"] == "Authentication required."
     assert response.headers["www-authenticate"] == "Bearer"
 
 

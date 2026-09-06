@@ -41,6 +41,9 @@ class AIAnalysisHistory(BaseModel):
 
     items: list[AIAnalysisRead]
     total: int
+    page: int = 1
+    page_size: int = 20
+    total_pages: int = 0
 
 
 class AICopilotQuestion(BaseModel):

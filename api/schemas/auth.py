@@ -12,8 +12,10 @@ from db.models.user import RoleEnum
 class LoginRequest(BaseModel):
     """Accept a bounded local username and secret password."""
 
+    model_config = ConfigDict(extra="forbid")
+
     username: str = Field(min_length=1, max_length=64)
-    password: SecretStr
+    password: SecretStr = Field(min_length=1, max_length=1024)
 
 
 class UserRead(BaseModel):

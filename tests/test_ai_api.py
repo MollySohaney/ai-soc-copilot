@@ -14,7 +14,13 @@ def test_get_ai_history_does_not_invoke_provider(client, monkeypatch, db_session
     response = client.get(f"/api/v1/alerts/{alert.id}/ai/history")
 
     assert response.status_code == 200
-    assert response.json() == {"items": [], "total": 0}
+    assert response.json() == {
+        "items": [],
+        "total": 0,
+        "page": 1,
+        "page_size": 20,
+        "total_pages": 0,
+    }
     assert calls == []
 
 

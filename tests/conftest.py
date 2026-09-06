@@ -20,6 +20,7 @@ from sqlalchemy.pool import StaticPool
 
 from api.main import app
 from backend.security.auth import token_digest
+from backend.security.abuse_limiter import get_abuse_limiter
 from backend.security.login_limiter import get_login_limiter
 from db.base import Base
 from db.models import AuthSession, RoleEnum, User
@@ -28,6 +29,16 @@ from db.session import get_db
 
 
 TEST_ACCESS_TOKEN = "test-only-bearer-token-not-a-real-secret"
+
+
+@pytest.fixture(autouse=True)
+def _reset_process_limiters() -> Iterator[None]:
+    """Keep process-local abuse state isolated between tests."""
+    get_abuse_limiter().reset()
+    get_login_limiter().reset()
+    yield
+    get_abuse_limiter().reset()
+    get_login_limiter().reset()
 
 
 @pytest.fixture()
@@ -96,11 +107,9 @@ def anonymous_client(db_session: Session) -> Iterator[TestClient]:
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
-    get_login_limiter().reset()
     try:
         yield TestClient(app)
     finally:
-        get_login_limiter().reset()
         app.dependency_overrides.pop(get_db, None)
 
 

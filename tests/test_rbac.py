@@ -140,7 +140,7 @@ def test_every_sensitive_endpoint_allows_and_denies_each_role(
                             operation,
                             response.text,
                         )
-                        assert response.json() == {"detail": "Insufficient permission."}
+                        assert response.json()["error"]["message"] == "Insufficient permission."
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -263,4 +263,4 @@ def test_admin_api_protects_final_active_admin(
         f"/api/v1/admin/users/{admin.id}", json={"is_active": False}
     )
     assert response.status_code == 409
-    assert response.json() == {"detail": "The final active Admin cannot be changed."}
+    assert response.json()["error"]["message"] == "The final active Admin cannot be changed."

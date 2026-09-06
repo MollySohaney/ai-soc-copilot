@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_permission
+from api.dependencies.limits import require_abuse_control
 from backend.audit import AuditService
 from api.schemas.detection_rule import (
     DetectionRuleCreate,
@@ -23,6 +24,7 @@ from api.schemas.detection_rule import (
     RuleValidationResponse,
     ValidateRuleRequest,
 )
+from api.validation import PositiveId
 from backend.detection.dsl import parse_logic
 from backend.detection.service import execute_rule
 from backend.security.auth import AuthenticatedPrincipal
@@ -44,6 +46,7 @@ def _execution_window(rule: DetectionRule, request: RuleExecutionRequest) -> tup
 @router.post(
     "/validate",
     response_model=RuleValidationResponse,
+    dependencies=[Depends(require_abuse_control("detection"))],
 )
 def validate_rule(
     payload: ValidateRuleRequest,
@@ -147,6 +150,7 @@ def _run_rule(
 @router.post(
     "/test",
     response_model=DetectionExecutionResponse,
+    dependencies=[Depends(require_abuse_control("detection"))],
 )
 def test_rule(
     payload: RuleExecutionRequest,
@@ -162,6 +166,7 @@ def test_rule(
 @router.post(
     "/execute",
     response_model=DetectionExecutionResponse,
+    dependencies=[Depends(require_abuse_control("detection"))],
 )
 def execute_rule_now(
     payload: RuleExecutionRequest,
@@ -176,7 +181,7 @@ def execute_rule_now(
 
 @router.get("/{rule_id}/runs", response_model=PaginatedDetectionRuns)
 def list_detection_runs(
-    rule_id: int, page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100),
+    rule_id: PositiveId, page: int = Query(default=1, ge=1, le=10_000), page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> PaginatedDetectionRuns:
     """List bounded execution history for one rule."""
@@ -195,7 +200,9 @@ def list_detection_runs(
 
 
 @router.get("/{rule_id}/runs/{run_id}", response_model=DetectionRunRead)
-def get_detection_run(rule_id: int, run_id: int, db: Session = Depends(get_db)) -> DetectionRun:
+def get_detection_run(
+    rule_id: PositiveId, run_id: PositiveId, db: Session = Depends(get_db)
+) -> DetectionRun:
     """Retrieve one execution record belonging to a rule."""
     run = db.get(DetectionRun, run_id)
     if run is None or run.detection_rule_id != rule_id:
@@ -224,7 +231,7 @@ def _find_by_name(db: Session, name: str, *, exclude_id: int | None = None) -> D
 def list_rules(
     enabled: bool | None = None,
     severity: SeverityEnum | None = None,
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10_000),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> PaginatedDetectionRules:
@@ -295,7 +302,7 @@ def create_rule(
     """
     if _find_by_name(db, payload.name) is not None:
         raise HTTPException(
-            status_code=409, detail=f"Detection rule name already exists: {payload.name!r}"
+            status_code=409, detail="Detection rule name already exists."
         )
 
     rule = DetectionRule(**payload.model_dump())
@@ -329,7 +336,7 @@ def create_rule(
 
 
 @router.get("/{rule_id}", response_model=DetectionRuleRead)
-def get_rule(rule_id: int, db: Session = Depends(get_db)) -> DetectionRule:
+def get_rule(rule_id: PositiveId, db: Session = Depends(get_db)) -> DetectionRule:
     """Retrieve a single detection rule by its primary key.
 
     Args:
@@ -353,7 +360,7 @@ def get_rule(rule_id: int, db: Session = Depends(get_db)) -> DetectionRule:
     response_model=DetectionRuleRead,
 )
 def update_rule(
-    rule_id: int,
+    rule_id: PositiveId,
     payload: DetectionRuleUpdate,
     principal: AuthenticatedPrincipal = Depends(
         require_permission(Permission.MANAGE_DETECTIONS)
@@ -389,7 +396,7 @@ def update_rule(
     if "name" in updates and updates["name"] != rule.name:
         if _find_by_name(db, updates["name"], exclude_id=rule_id) is not None:
             raise HTTPException(
-                status_code=409, detail=f"Detection rule name already exists: {updates['name']!r}"
+                status_code=409, detail="Detection rule name already exists."
             )
 
     logic_changed = any(

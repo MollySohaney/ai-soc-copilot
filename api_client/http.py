@@ -70,21 +70,24 @@ def get_default_client() -> httpx.Client:
 
 
 def _extract_detail(response: httpx.Response) -> str | None:
-    """Pull the FastAPI `detail` field out of an error response body, if present.
+    """Pull the common API error message out of an error response body, if present.
 
     Args:
         response: The HTTP response to inspect.
 
     Returns:
-        The detail string, or None if the body is not JSON or has no `detail` field.
+        The message string, or None if the body is not a recognized JSON error.
     """
     try:
         body = response.json()
     except ValueError:
         return None
     if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict) and isinstance(error.get("message"), str):
+            return error["message"]
         detail = body.get("detail")
-        if isinstance(detail, str):
+        if isinstance(detail, str):  # Backward compatibility with older deployments.
             return detail
     return None
 

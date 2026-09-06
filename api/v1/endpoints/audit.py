@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_permission
 from api.schemas.audit import AuditEventRead, PaginatedAuditEvents
+from api.validation import validate_time_window
 from backend.security.rbac import Permission
+from config.settings import AppConfig, load_config
 from db.models import AuditEvent
 from db.session import get_db
 
@@ -31,11 +33,15 @@ def list_audit_events(
     outcome: str | None = Query(default=None, pattern="^(succeeded|failed|denied)$"),
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10_000),
     page_size: int = Query(default=20, ge=1, le=100),
+    config: AppConfig = Depends(load_config),
     db: Session = Depends(get_db),
 ) -> PaginatedAuditEvents:
     """List sanitized events using exact indexed filters."""
+    validate_time_window(
+        start_time, end_time, max_days=config.api_max_query_window_days
+    )
     filters = []
     if actor_user_id is not None:
         filters.append(AuditEvent.actor_user_id == actor_user_id)

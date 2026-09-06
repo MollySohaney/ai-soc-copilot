@@ -5,10 +5,16 @@ from __future__ import annotations
 import re
 import uuid
 
-from fastapi import FastAPI
-from fastapi import Request
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException
 
+from api.errors import (
+    http_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
+from api.middleware import HttpBoundaryMiddleware, SafeCORSMiddleware
 from api.v1.router import api_router
 from backend.audit.context import (
     AuditRequestContext,
@@ -28,12 +34,17 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name)
 
     app.add_middleware(
-        CORSMiddleware,
+        SafeCORSMiddleware,
         allow_origins=settings.frontend_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        expose_headers=["X-Request-ID", "Retry-After"],
     )
+    app.add_middleware(HttpBoundaryMiddleware, max_body_bytes=settings.api_max_body_bytes)
+    app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
 
     @app.middleware("http")
     async def add_audit_request_context(request: Request, call_next):  # noqa: ANN001, ANN202
