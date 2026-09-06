@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -56,6 +56,7 @@ def execute_rule(
     window_start: datetime,
     window_end: datetime,
     dry_run: bool = False,
+    before_commit: Callable[[DetectionRun, tuple[int, ...]], None] | None = None,
 ) -> ExecutionResult:
     """Execute one enabled rule over a bounded event-time window.
 
@@ -145,6 +146,8 @@ def execute_rule(
         run.events_scanned = len(candidates)
         run.alerts_created = len(alert_ids)
         run.finished_at = datetime.now(timezone.utc)
+        if before_commit is not None:
+            before_commit(run, tuple(alert_ids))
         db.commit()
         return ExecutionResult("completed", run.id, len(candidates), tuple(alert_ids), tuple(firings), truncated)
     except Exception as error:

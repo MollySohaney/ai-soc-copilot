@@ -10,6 +10,8 @@ from backend.ai.context import build_evidence_context
 from backend.ai.prompts import TRIAGE_SYSTEM_INSTRUCTION
 from backend.ai.provider import AIProviderError, AIRequest, build_ai_provider
 from backend.ai.triage import TriageValidationError
+from backend.audit import AuditService
+from backend.security.auth import AuthenticatedPrincipal
 from backend.security.rbac import Permission
 from config.settings import load_config
 from db.models import AIAnalysis, Case
@@ -22,9 +24,12 @@ router = APIRouter(prefix="/cases/{case_id}/ai", tags=["ai"])
     "/report",
     response_model=AIAnalysisRead,
     status_code=201,
-    dependencies=[Depends(require_permission(Permission.REQUEST_AI))],
 )
-def draft_report(case_id: int, db: Session = Depends(get_db)) -> AIAnalysis:
+def draft_report(
+    case_id: int,
+    principal: AuthenticatedPrincipal = Depends(require_permission(Permission.REQUEST_AI)),
+    db: Session = Depends(get_db),
+) -> AIAnalysis:
     """Create one reviewable report draft from the active case evidence."""
     if db.get(Case, case_id) is None:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -57,6 +62,20 @@ def draft_report(case_id: int, db: Session = Depends(get_db)) -> AIAnalysis:
             error_message=getattr(error, "safe_message", "Report draft could not be validated."),
         )
     db.add(record)
+    db.flush()
+    AuditService(db).record(
+        action="ai.report.request",
+        outcome="succeeded" if record.status == "succeeded" else "failed",
+        actor=principal.user,
+        target_type="ai_analysis",
+        target_id=record.id,
+        details={
+            "case_id": case_id,
+            "status": record.status,
+            "provider": record.provider,
+            "model": record.model,
+        },
+    )
     db.commit()
     db.refresh(record)
     return record

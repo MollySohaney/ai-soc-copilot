@@ -10,6 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_permission
+from backend.audit import AuditService
+from backend.security.auth import AuthenticatedPrincipal
 from api.schemas.alert import AlertRead
 from api.schemas.case import (
     CaseAlertsAddRequest,
@@ -134,9 +136,14 @@ def list_cases(
     "",
     response_model=CaseDetail,
     status_code=201,
-    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
 )
-def create_case(payload: CaseCreateRequest, db: Session = Depends(get_db)) -> CaseDetail:
+def create_case(
+    payload: CaseCreateRequest,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MUTATE_INVESTIGATIONS)
+    ),
+    db: Session = Depends(get_db),
+) -> CaseDetail:
     """Create an investigation case, optionally linking it to existing alerts.
 
     Args:
@@ -179,6 +186,20 @@ def create_case(payload: CaseCreateRequest, db: Session = Depends(get_db)) -> Ca
         )
     )
 
+    AuditService(db).record(
+        action="case.create",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="case",
+        target_id=case.id,
+        after_state={
+            "case_number": case.case_number,
+            "status": case.status.value,
+            "priority": case.priority.value,
+            "alert_ids": alert_ids,
+        },
+    )
+
     db.commit()
     db.refresh(case)
     return _to_case_detail(case)
@@ -207,9 +228,15 @@ def get_case(case_id: int, db: Session = Depends(get_db)) -> CaseDetail:
 @router.patch(
     "/{case_id}",
     response_model=CaseDetail,
-    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
 )
-def update_case(case_id: int, payload: CaseUpdate, db: Session = Depends(get_db)) -> CaseDetail:
+def update_case(
+    case_id: int,
+    payload: CaseUpdate,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MUTATE_INVESTIGATIONS)
+    ),
+    db: Session = Depends(get_db),
+) -> CaseDetail:
     """Apply a partial update to an investigation case.
 
     Args:
@@ -227,6 +254,12 @@ def update_case(case_id: int, payload: CaseUpdate, db: Session = Depends(get_db)
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
+    before_state = {
+        "title": case.title,
+        "status": case.status.value,
+        "priority": case.priority.value,
+        "assignee": case.assignee,
+    }
     updates = payload.model_dump(exclude_unset=True)
 
     if "status" in updates and updates["status"] != case.status:
@@ -260,6 +293,21 @@ def update_case(case_id: int, payload: CaseUpdate, db: Session = Depends(get_db)
     if updates:
         case.updated_at = datetime.now(timezone.utc)
 
+    AuditService(db).record(
+        action="case.update",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="case",
+        target_id=case.id,
+        before_state=before_state,
+        after_state={
+            "title": case.title,
+            "status": case.status.value,
+            "priority": case.priority.value,
+            "assignee": case.assignee,
+        },
+    )
+
     db.commit()
     db.refresh(case)
     return _to_case_detail(case)
@@ -268,10 +316,14 @@ def update_case(case_id: int, payload: CaseUpdate, db: Session = Depends(get_db)
 @router.post(
     "/{case_id}/alerts",
     response_model=CaseDetail,
-    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
 )
 def add_case_alerts(
-    case_id: int, payload: CaseAlertsAddRequest, db: Session = Depends(get_db)
+    case_id: int,
+    payload: CaseAlertsAddRequest,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MUTATE_INVESTIGATIONS)
+    ),
+    db: Session = Depends(get_db),
 ) -> CaseDetail:
     """Link one or more alerts to an investigation case, skipping already-linked alerts.
 
@@ -318,6 +370,15 @@ def add_case_alerts(
             )
         )
 
+    AuditService(db).record(
+        action="case.alerts.add",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="case",
+        target_id=case.id,
+        details={"requested_alert_ids": alert_ids, "added_alert_ids": new_ids},
+    )
+
     db.commit()
     db.refresh(case)
     return _to_case_detail(case)
@@ -326,9 +387,15 @@ def add_case_alerts(
 @router.delete(
     "/{case_id}/alerts/{alert_id}",
     response_model=CaseDetail,
-    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
 )
-def remove_case_alert(case_id: int, alert_id: int, db: Session = Depends(get_db)) -> CaseDetail:
+def remove_case_alert(
+    case_id: int,
+    alert_id: int,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MUTATE_INVESTIGATIONS)
+    ),
+    db: Session = Depends(get_db),
+) -> CaseDetail:
     """Unlink an alert from an investigation case.
 
     Args:
@@ -360,6 +427,15 @@ def remove_case_alert(case_id: int, alert_id: int, db: Session = Depends(get_db)
             message=f"Unlinked alert {alert_id}",
             author=None,
         )
+    )
+
+    AuditService(db).record(
+        action="case.alerts.remove",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="case",
+        target_id=case.id,
+        details={"removed_alert_id": alert_id},
     )
 
     db.commit()
@@ -402,10 +478,14 @@ def list_case_activities(case_id: int, db: Session = Depends(get_db)) -> Paginat
     "/{case_id}/activities",
     response_model=CaseActivityRead,
     status_code=201,
-    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
 )
 def create_case_activity(
-    case_id: int, payload: CaseActivityCreateRequest, db: Session = Depends(get_db)
+    case_id: int,
+    payload: CaseActivityCreateRequest,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MUTATE_INVESTIGATIONS)
+    ),
+    db: Session = Depends(get_db),
 ) -> CaseActivity:
     """Append a new activity timeline entry to a case.
 
@@ -432,6 +512,15 @@ def create_case_activity(
         created_at=datetime.now(timezone.utc),
     )
     db.add(activity)
+    db.flush()
+    AuditService(db).record(
+        action="case.activity.create",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="case_activity",
+        target_id=activity.id,
+        details={"case_id": case.id, "activity_type": activity.activity_type},
+    )
     db.commit()
     db.refresh(activity)
     return activity

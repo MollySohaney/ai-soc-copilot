@@ -69,6 +69,7 @@ SENSITIVE_OPERATIONS = (
     SensitiveOperation("POST", "/api/v1/admin/users", {"username": "rbac-created", "password": "rbac-test-only-password", "role": "viewer"}, Permission.MANAGE_USERS),
     SensitiveOperation("PATCH", "/api/v1/admin/users/99999", {"role": "viewer"}, Permission.MANAGE_USERS),
     SensitiveOperation("POST", "/api/v1/admin/users/99999/revoke-sessions", {}, Permission.MANAGE_USERS),
+    SensitiveOperation("GET", "/api/v1/audit-events", None, Permission.READ_AUDIT),
 )
 
 

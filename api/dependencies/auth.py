@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from backend.audit import AuditService
 from backend.security.auth import AuthenticatedPrincipal, AuthenticationError, authenticate_session
 from backend.security.rbac import AuthorizationDenied, Permission, require_user_permission
 from config.settings import AppConfig, load_config
@@ -41,10 +42,19 @@ def require_permission(permission: Permission):  # noqa: ANN201
 
     def dependency(
         principal: AuthenticatedPrincipal = Depends(require_authenticated_user),
+        db: Session = Depends(get_db),
     ) -> AuthenticatedPrincipal:
         try:
             require_user_permission(principal.user, permission)
         except AuthorizationDenied as error:
+            AuditService(db).record(
+                action="authorization.denied",
+                outcome="denied",
+                actor=principal.user,
+                target_type="api_route",
+                details={"permission": permission.value},
+            )
+            db.commit()
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permission.",

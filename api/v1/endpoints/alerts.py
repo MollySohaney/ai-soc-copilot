@@ -10,6 +10,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from api.dependencies.auth import require_permission
+from backend.audit import AuditService
+from backend.security.auth import AuthenticatedPrincipal
 from api.schemas.alert import AlertEventsRead, AlertRead, AlertUpdate, PaginatedAlerts
 from api.schemas.event import EventRead
 from backend.security.rbac import Permission
@@ -126,9 +128,15 @@ def get_alert(alert_id: int, db: Session = Depends(get_db)) -> Alert:
 @router.patch(
     "/{alert_id}",
     response_model=AlertRead,
-    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
 )
-def update_alert(alert_id: int, payload: AlertUpdate, db: Session = Depends(get_db)) -> Alert:
+def update_alert(
+    alert_id: int,
+    payload: AlertUpdate,
+    principal: AuthenticatedPrincipal = Depends(
+        require_permission(Permission.MUTATE_INVESTIGATIONS)
+    ),
+    db: Session = Depends(get_db),
+) -> Alert:
     """Apply a partial update to an alert.
 
     Args:
@@ -146,11 +154,22 @@ def update_alert(alert_id: int, payload: AlertUpdate, db: Session = Depends(get_
     if alert is None:
         raise HTTPException(status_code=404, detail="Alert not found")
 
+    before_state = {"status": alert.status.value}
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(alert, field, value)
     if updates:
         alert.updated_at = datetime.now(timezone.utc)
+
+    AuditService(db).record(
+        action="alert.update",
+        outcome="succeeded",
+        actor=principal.user,
+        target_type="alert",
+        target_id=alert.id,
+        before_state=before_state,
+        after_state={"status": alert.status.value},
+    )
 
     db.commit()
     db.refresh(alert)
