@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test-only credential and token fixtures are non-secret by design."
+paths = [
+  '''tests/''',
+]
