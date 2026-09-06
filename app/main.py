@@ -15,6 +15,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.components.copilot import render_copilot_panel
+from app.components.auth import render_login
+from app.components import api_state
 from app.components.theme import apply_theme, render_sidebar_brand, render_sidebar_status
 from app.views import (
     analyze_alert,
@@ -190,12 +192,28 @@ def main() -> None:
     configure_streamlit_page(config)
     apply_theme()
 
+    authenticated, auth_message = api_state.validate_authenticated_session()
+    if not authenticated:
+        render_login(config, message=auth_message)
+        return
+
     render_sidebar_brand(
         title=config.app_name,
         subtitle="Security Operations Assistant",
     )
 
     navigation = build_navigation()
+    current_user = api_state.get_current_user()
+    if current_user is not None:
+        st.sidebar.caption(f"Signed in as {current_user.username}")
+    if st.sidebar.button(
+        "Sign out",
+        icon=":material/logout:",
+        key="auth_logout",
+        width="stretch",
+    ):
+        api_state.logout()
+        st.rerun()
     selection = render_sidebar_navigation(navigation)
     render_sidebar_status()
 

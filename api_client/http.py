@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
@@ -33,18 +34,24 @@ class ApiClientError(Exception):
         self.detail = detail
 
 
-def build_client(base_url: str, *, timeout: float = 10.0) -> httpx.Client:
+def build_client(
+    base_url: str,
+    *,
+    timeout: float = 10.0,
+    headers: Mapping[str, str] | None = None,
+) -> httpx.Client:
     """Build an httpx client configured to call the SOC API.
 
     Args:
         base_url: The base URL to prefix onto every request path, e.g.
             "http://localhost:8000/api/v1".
         timeout: The request timeout, in seconds.
+        headers: Optional non-secret default headers for the client.
 
     Returns:
         A configured httpx client.
     """
-    return httpx.Client(base_url=base_url, timeout=timeout)
+    return httpx.Client(base_url=base_url, timeout=timeout, headers=headers)
 
 
 @lru_cache(maxsize=1)

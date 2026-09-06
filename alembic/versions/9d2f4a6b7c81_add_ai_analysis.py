@@ -31,8 +31,6 @@ def upgrade() -> None:
         sa.Column("evidence_refs", sa.JSON(), nullable=True),
         sa.Column("latency_ms", sa.Integer(), nullable=True),
         sa.Column("usage", sa.JSON(), nullable=True),
-        sa.Column("rate_limit_remaining", sa.Integer(), nullable=True),
-        sa.Column("estimated_cost_usd", sa.Float(), nullable=True),
         sa.Column("status", sa.String(length=30), nullable=False),
         sa.Column("error_message", sa.String(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

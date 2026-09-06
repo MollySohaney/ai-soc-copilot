@@ -93,6 +93,23 @@ def test_ai_config_defaults_to_disabled_and_redacts_api_key() -> None:
     assert "ai-secret" not in config.to_safe_dict().values()
 
 
+def test_auth_session_and_login_limits_must_be_positive() -> None:
+    """Authentication expiry and brute-force settings reject unsafe values."""
+    fields = (
+        "auth_session_idle_minutes",
+        "auth_session_absolute_hours",
+        "auth_login_max_attempts",
+        "auth_login_window_seconds",
+    )
+    for field in fields:
+        try:
+            AppConfig(**{field: 0})
+        except ValueError as error:
+            assert "Authentication limits" in str(error)
+        else:
+            raise AssertionError(f"Expected {field} to reject zero.")
+
+
 def test_config_rejects_non_positive_ai_limits() -> None:
     """AI timeout and token limits must be positive."""
     for field, value in (("ai_request_timeout_seconds", 0), ("ai_max_input_tokens", 0), ("ai_max_output_tokens", 0)):

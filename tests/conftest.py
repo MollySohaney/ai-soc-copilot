@@ -9,6 +9,7 @@ known, reproducible data instead of mocks.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -18,9 +19,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api.main import app
+from backend.security.auth import token_digest
+from backend.security.login_limiter import get_login_limiter
 from db.base import Base
+from db.models import AuthSession, User
 from db.seed import seed
 from db.session import get_db
+
+
+TEST_ACCESS_TOKEN = "test-only-bearer-token-not-a-real-secret"
 
 
 @pytest.fixture()
@@ -43,6 +50,22 @@ def db_session() -> Iterator[Session]:
     session = session_factory()
     try:
         seed(session)
+        test_user = User(
+            username="test-analyst",
+            password_hash="test-only-password-hash",
+            is_active=True,
+        )
+        session.add(test_user)
+        session.flush()
+        session.add(
+            AuthSession(
+                user=test_user,
+                token_hash=token_digest(TEST_ACCESS_TOKEN),
+                created_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+                last_seen_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+                absolute_expires_at=datetime(2100, 1, 1, tzinfo=timezone.utc),
+            )
+        )
         session.commit()
         yield session
     finally:
@@ -59,8 +82,24 @@ def client(db_session: Session) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_db] = _override_get_db
     try:
+        yield TestClient(app, headers={"Authorization": f"Bearer {TEST_ACCESS_TOKEN}"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture()
+def anonymous_client(db_session: Session) -> Iterator[TestClient]:
+    """Provide an unauthenticated client for login and denial tests."""
+
+    def _override_get_db() -> Iterator[Session]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override_get_db
+    get_login_limiter().reset()
+    try:
         yield TestClient(app)
     finally:
+        get_login_limiter().reset()
         app.dependency_overrides.pop(get_db, None)
 
 
@@ -83,7 +122,11 @@ def api_client_transport(db_session: Session) -> Iterator[httpx.Client]:
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
-    http_client = TestClient(app, base_url="http://testserver/api/v1")
+    http_client = TestClient(
+        app,
+        base_url="http://testserver/api/v1",
+        headers={"Authorization": f"Bearer {TEST_ACCESS_TOKEN}"},
+    )
     try:
         yield http_client
     finally:

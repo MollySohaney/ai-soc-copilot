@@ -64,7 +64,15 @@ python -m db.seed
 
 This command is idempotent: every row is looked up by a natural key before insert, so re-running it against the same database does not create duplicates.
 
-7. Start the Streamlit application and the FastAPI service as two separate local processes:
+7. Create a local demo login using the interactive password prompt:
+
+```bash
+python -m db.bootstrap_user --username demo-analyst
+```
+
+The command is idempotent and never replaces an existing password. For a disposable demo, `--generate-password` prints a random password once. Automation may supply `DEMO_PASSWORD` through the process environment, but passwords must not be passed as command-line arguments, committed to `.env`, or copied into logs.
+
+8. Start the Streamlit application and the FastAPI service as two separate local processes:
 
 ```bash
 uvicorn api.main:app --reload --port 8000
@@ -75,6 +83,8 @@ streamlit run app/main.py
 ```
 
 If the FastAPI service runs on a different host or port, set `API_BASE_URL` in `.env` so the Streamlit frontend's API client (`api_client/`) can reach it — it defaults to `http://localhost:8000`.
+
+All SOC API routes except login and liveness require an opaque bearer session. The Streamlit login form keeps the token in per-tab server-side session state; PostgreSQL stores only its SHA-256 digest. Configure idle/absolute expiry and login failure limits with the `AUTH_*` variables in `.env.example`.
 
 ## Running Tests
 

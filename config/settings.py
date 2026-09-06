@@ -51,6 +51,10 @@ class AppConfig(BaseModel):
     ai_max_output_tokens: int = Field(default=1000)
     ai_prompt_version: str = Field(default="v1")
     ai_response_schema_version: str = Field(default="v1")
+    auth_session_idle_minutes: int = Field(default=30)
+    auth_session_absolute_hours: int = Field(default=8)
+    auth_login_max_attempts: int = Field(default=5)
+    auth_login_window_seconds: int = Field(default=300)
 
     @property
     def database_url(self) -> str:
@@ -190,6 +194,19 @@ class AppConfig(BaseModel):
             raise ValueError("AI token limits must be greater than zero.")
         return value
 
+    @field_validator(
+        "auth_session_idle_minutes",
+        "auth_session_absolute_hours",
+        "auth_login_max_attempts",
+        "auth_login_window_seconds",
+    )
+    @classmethod
+    def validate_auth_limits(cls, value: int) -> int:
+        """Ensure authentication expiry and abuse-control limits are positive."""
+        if value <= 0:
+            raise ValueError("Authentication limits must be greater than zero.")
+        return value
+
     def to_safe_dict(self) -> dict[str, str | int | float | bool | list[str] | None]:
         """Return a UI-safe configuration view.
 
@@ -257,4 +274,8 @@ def load_config() -> AppConfig:
         ai_max_output_tokens=int(os.getenv("AI_MAX_OUTPUT_TOKENS", "1000")),
         ai_prompt_version=os.getenv("AI_PROMPT_VERSION", "v1"),
         ai_response_schema_version=os.getenv("AI_RESPONSE_SCHEMA_VERSION", "v1"),
+        auth_session_idle_minutes=int(os.getenv("AUTH_SESSION_IDLE_MINUTES", "30")),
+        auth_session_absolute_hours=int(os.getenv("AUTH_SESSION_ABSOLUTE_HOURS", "8")),
+        auth_login_max_attempts=int(os.getenv("AUTH_LOGIN_MAX_ATTEMPTS", "5")),
+        auth_login_window_seconds=int(os.getenv("AUTH_LOGIN_WINDOW_SECONDS", "300")),
     )
