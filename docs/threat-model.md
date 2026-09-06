@@ -214,3 +214,4 @@ Update this threat model whenever a trust boundary changes; a real AI provider,
 remote deployment, new integration, new upload/export format, additional API
 worker, external identity provider, secret manager, or immutable audit sink is
 introduced; or an accepted-risk review trigger is reached.
+
