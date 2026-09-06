@@ -6,11 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from api.dependencies.auth import require_permission
 from api.schemas.ai_analysis import AIAnalysisHistory, AIAnalysisRead, AIAnalysisRequest
 from backend.ai.context import build_evidence_context
 from backend.ai.provider import AIProviderError, build_ai_provider
 from backend.ai.prompts import build_triage_request
 from backend.ai.triage import TriageValidationError, validate_triage_output
+from backend.security.rbac import Permission
 from config.settings import load_config
 from db.models import AIAnalysis, Alert
 from db.session import get_db
@@ -22,7 +24,12 @@ def _analysis_read(record: AIAnalysis) -> AIAnalysisRead:
     return AIAnalysisRead.model_validate(record)
 
 
-@router.post("/triage", response_model=AIAnalysisRead, status_code=201)
+@router.post(
+    "/triage",
+    response_model=AIAnalysisRead,
+    status_code=201,
+    dependencies=[Depends(require_permission(Permission.REQUEST_AI))],
+)
 def request_triage(alert_id: int, payload: AIAnalysisRequest, db: Session = Depends(get_db)) -> AIAnalysis:
     """Explicitly request one advisory triage attempt for an alert."""
     del payload

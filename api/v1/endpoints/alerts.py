@@ -9,8 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from api.dependencies.auth import require_permission
 from api.schemas.alert import AlertEventsRead, AlertRead, AlertUpdate, PaginatedAlerts
 from api.schemas.event import EventRead
+from backend.security.rbac import Permission
 from db.models.alert import Alert, alert_event
 from db.models.enums import AlertStatusEnum, SeverityEnum
 from db.models.event import Event
@@ -121,7 +123,11 @@ def get_alert(alert_id: int, db: Session = Depends(get_db)) -> Alert:
     return alert
 
 
-@router.patch("/{alert_id}", response_model=AlertRead)
+@router.patch(
+    "/{alert_id}",
+    response_model=AlertRead,
+    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
+)
 def update_alert(alert_id: int, payload: AlertUpdate, db: Session = Depends(get_db)) -> Alert:
     """Apply a partial update to an alert.
 

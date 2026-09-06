@@ -6,6 +6,7 @@ import streamlit as st
 
 from api_client import cases as cases_api
 from api_client.http import ApiClientError
+from backend.security.rbac import Permission
 from db.models.enums import CasePriorityEnum, CaseStatusEnum
 
 from ..components import api_state
@@ -47,6 +48,8 @@ def _render_filters() -> dict:
 
 
 def _render_create_form() -> None:
+    if not api_state.has_permission(Permission.MUTATE_INVESTIGATIONS):
+        return
     with st.expander("Create Case"):
         with st.form("create_case_form"):
             title = st.text_input("Title", key="new_case_title")
@@ -167,6 +170,7 @@ def _render_list() -> None:
 
 
 def _render_alerts_tab(case) -> None:
+    can_mutate = api_state.has_permission(Permission.MUTATE_INVESTIGATIONS)
     with st.container(border=True):
         if not case.alerts:
             api_state.render_empty_state("No alerts linked to this case.")
@@ -185,7 +189,7 @@ def _render_alerts_tab(case) -> None:
                         """
                     )
                 with col_action:
-                    if st.button("Remove", key=f"remove_alert_{case.id}_{alert.id}"):
+                    if can_mutate and st.button("Remove", key=f"remove_alert_{case.id}_{alert.id}"):
                         try:
                             cases_api.remove_case_alert(
                                 case.id, alert.id, client=api_state.get_client()
@@ -196,27 +200,30 @@ def _render_alerts_tab(case) -> None:
                             st.cache_data.clear()
                             st.rerun()
 
-        st.markdown("##### Add Alert")
-        col_input, col_button = st.columns([3, 1])
-        with col_input:
-            alert_id_input = st.number_input(
-                "Alert ID",
-                min_value=1,
-                step=1,
-                key=f"add_alert_id_{case.id}",
-                label_visibility="collapsed",
-            )
-        with col_button:
-            if st.button("Add Alert", key=f"add_alert_button_{case.id}"):
-                try:
-                    cases_api.add_case_alerts(
-                        case.id, [int(alert_id_input)], client=api_state.get_client()
-                    )
-                except ApiClientError as error:
-                    api_state.render_error(error)
-                else:
-                    st.cache_data.clear()
-                    st.rerun()
+        if can_mutate:
+            st.markdown("##### Add Alert")
+            col_input, col_button = st.columns([3, 1])
+            with col_input:
+                alert_id_input = st.number_input(
+                    "Alert ID",
+                    min_value=1,
+                    step=1,
+                    key=f"add_alert_id_{case.id}",
+                    label_visibility="collapsed",
+                )
+            with col_button:
+                if st.button("Add Alert", key=f"add_alert_button_{case.id}"):
+                    try:
+                        cases_api.add_case_alerts(
+                            case.id, [int(alert_id_input)], client=api_state.get_client()
+                        )
+                    except ApiClientError as error:
+                        api_state.render_error(error)
+                    else:
+                        st.cache_data.clear()
+                        st.rerun()
+        else:
+            st.caption("Read-only role: case links cannot be changed.")
 
 
 def _render_activity_tab(case) -> None:
@@ -242,8 +249,11 @@ def _render_activity_tab(case) -> None:
                 ]
                 render_timeline(timeline_items)
 
-        st.text_area("Add a note", key=f"case_note_input_{case.id}", placeholder="Document findings, decisions, or next steps...")
-        if st.button("Add Note", type="primary", key=f"add_case_note_{case.id}"):
+        if api_state.has_permission(Permission.MUTATE_INVESTIGATIONS):
+            st.text_area("Add a note", key=f"case_note_input_{case.id}", placeholder="Document findings, decisions, or next steps...")
+        if api_state.has_permission(Permission.MUTATE_INVESTIGATIONS) and st.button(
+            "Add Note", type="primary", key=f"add_case_note_{case.id}"
+        ):
             note = st.session_state.get(f"case_note_input_{case.id}", "")
             if not note:
                 st.error("Note text is required.")
@@ -292,6 +302,7 @@ def _render_detail(case_id: int) -> None:
         """
     )
 
+    can_mutate = api_state.has_permission(Permission.MUTATE_INVESTIGATIONS)
     col_status, col_priority, col_button = st.columns([2, 2, 1])
     with col_status:
         status_options = [CASE_STATUS_DISPLAY[item] for item in CaseStatusEnum]
@@ -300,6 +311,7 @@ def _render_detail(case_id: int) -> None:
             options=status_options,
             index=status_options.index(CASE_STATUS_DISPLAY[case.status]),
             key=f"case_status_select_{case.id}",
+            disabled=not can_mutate,
         )
     with col_priority:
         priority_options = [item.value for item in CasePriorityEnum]
@@ -308,10 +320,11 @@ def _render_detail(case_id: int) -> None:
             options=priority_options,
             index=priority_options.index(case.priority.value),
             key=f"case_priority_select_{case.id}",
+            disabled=not can_mutate,
         )
     with col_button:
         st.markdown('<div style="margin-top:1.75rem;"></div>', unsafe_allow_html=True)
-        if st.button("Update", type="primary", key=f"update_case_{case.id}"):
+        if can_mutate and st.button("Update", type="primary", key=f"update_case_{case.id}"):
             try:
                 cases_api.update_case(
                     case.id,

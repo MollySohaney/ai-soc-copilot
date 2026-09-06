@@ -13,7 +13,7 @@ from db.models.detection_run import DetectionRun
 from db.models.enums import AlertStatusEnum, CasePriorityEnum, CaseStatusEnum, SeverityEnum
 from db.models.event import Event
 from db.models.ingestion import IngestionCheckpoint, IngestionRun
-from db.models.user import AuthSession, User
+from db.models.user import AuthSession, RoleEnum, User
 
 __all__ = [
     "Base",
@@ -34,5 +34,6 @@ __all__ = [
     "IngestionCheckpoint",
     "IngestionRun",
     "AuthSession",
+    "RoleEnum",
     "User",
 ]

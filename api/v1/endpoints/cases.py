@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from api.dependencies.auth import require_permission
 from api.schemas.alert import AlertRead
 from api.schemas.case import (
     CaseAlertsAddRequest,
@@ -23,6 +24,7 @@ from api.schemas.case_activity import (
     CaseActivityRead,
     PaginatedCaseActivities,
 )
+from backend.security.rbac import Permission
 from db.models.alert import Alert
 from db.models.case import Case
 from db.models.case_activity import CaseActivity
@@ -128,7 +130,12 @@ def list_cases(
     )
 
 
-@router.post("", response_model=CaseDetail, status_code=201)
+@router.post(
+    "",
+    response_model=CaseDetail,
+    status_code=201,
+    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
+)
 def create_case(payload: CaseCreateRequest, db: Session = Depends(get_db)) -> CaseDetail:
     """Create an investigation case, optionally linking it to existing alerts.
 
@@ -197,7 +204,11 @@ def get_case(case_id: int, db: Session = Depends(get_db)) -> CaseDetail:
     return _to_case_detail(case)
 
 
-@router.patch("/{case_id}", response_model=CaseDetail)
+@router.patch(
+    "/{case_id}",
+    response_model=CaseDetail,
+    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
+)
 def update_case(case_id: int, payload: CaseUpdate, db: Session = Depends(get_db)) -> CaseDetail:
     """Apply a partial update to an investigation case.
 
@@ -254,7 +265,11 @@ def update_case(case_id: int, payload: CaseUpdate, db: Session = Depends(get_db)
     return _to_case_detail(case)
 
 
-@router.post("/{case_id}/alerts", response_model=CaseDetail)
+@router.post(
+    "/{case_id}/alerts",
+    response_model=CaseDetail,
+    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
+)
 def add_case_alerts(
     case_id: int, payload: CaseAlertsAddRequest, db: Session = Depends(get_db)
 ) -> CaseDetail:
@@ -308,7 +323,11 @@ def add_case_alerts(
     return _to_case_detail(case)
 
 
-@router.delete("/{case_id}/alerts/{alert_id}", response_model=CaseDetail)
+@router.delete(
+    "/{case_id}/alerts/{alert_id}",
+    response_model=CaseDetail,
+    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
+)
 def remove_case_alert(case_id: int, alert_id: int, db: Session = Depends(get_db)) -> CaseDetail:
     """Unlink an alert from an investigation case.
 
@@ -379,7 +398,12 @@ def list_case_activities(case_id: int, db: Session = Depends(get_db)) -> Paginat
     )
 
 
-@router.post("/{case_id}/activities", response_model=CaseActivityRead, status_code=201)
+@router.post(
+    "/{case_id}/activities",
+    response_model=CaseActivityRead,
+    status_code=201,
+    dependencies=[Depends(require_permission(Permission.MUTATE_INVESTIGATIONS))],
+)
 def create_case_activity(
     case_id: int, payload: CaseActivityCreateRequest, db: Session = Depends(get_db)
 ) -> CaseActivity:

@@ -9,6 +9,7 @@ import streamlit as st
 from api.schemas.detection_rule import MITRE_TACTICS
 from api_client import rules as rules_api
 from api_client.http import ApiClientError
+from backend.security.rbac import Permission
 from db.models.enums import SeverityEnum
 
 from ..components import api_state
@@ -58,6 +59,8 @@ def _render_filters() -> dict:
 
 
 def _render_create_form() -> None:
+    if not api_state.has_permission(Permission.MANAGE_DETECTIONS):
+        return
     with st.expander("Create Rule"):
         with st.form("create_rule_form"):
             name = st.text_input("Name", key="new_rule_name")
@@ -130,6 +133,8 @@ def _render_create_form() -> None:
 
 
 def _render_edit_form(rule) -> None:
+    if not api_state.has_permission(Permission.MANAGE_DETECTIONS):
+        return
     with st.expander(f"Edit {rule.name}"):
         with st.form(f"edit_rule_form_{rule.id}"):
             description = st.text_area("Description", value=rule.description or "", key=f"edit_rule_description_{rule.id}")
@@ -217,6 +222,7 @@ def _render_edit_form(rule) -> None:
 
 
 def _render_rule_row(rule) -> None:
+    can_manage = api_state.has_permission(Permission.MANAGE_DETECTIONS)
     with st.container(border=True):
         col_info, col_toggle = st.columns([5, 1])
         with col_info:
@@ -238,7 +244,7 @@ def _render_rule_row(rule) -> None:
             )
         with col_toggle:
             toggle_label = "Disable" if rule.enabled else "Enable"
-            if st.button(toggle_label, key=f"toggle_rule_{rule.id}"):
+            if can_manage and st.button(toggle_label, key=f"toggle_rule_{rule.id}"):
                 try:
                     rules_api.update_rule(
                         rule.id, enabled=not rule.enabled, client=api_state.get_client()
@@ -253,7 +259,7 @@ def _render_rule_row(rule) -> None:
         with st.expander("Test, run, and history"):
             col_test, col_run = st.columns(2)
             with col_test:
-                if st.button("Test rule", key=f"test_rule_{rule.id}", icon=":material/science:"):
+                if can_manage and st.button("Test rule", key=f"test_rule_{rule.id}", icon=":material/science:"):
                     try:
                         result = rules_api.test_rule(rule.id, client=api_state.get_client())
                     except ApiClientError as error:
@@ -263,8 +269,8 @@ def _render_rule_row(rule) -> None:
                         for firing in result.would_fire:
                             _render_firing_explanation(firing)
             with col_run:
-                confirmed = st.checkbox("Confirm run", key=f"confirm_rule_{rule.id}")
-                if st.button("Run now", key=f"run_rule_{rule.id}", disabled=not confirmed, type="primary"):
+                confirmed = can_manage and st.checkbox("Confirm run", key=f"confirm_rule_{rule.id}")
+                if can_manage and st.button("Run now", key=f"run_rule_{rule.id}", disabled=not confirmed, type="primary"):
                     try:
                         result = rules_api.execute_rule(rule.id, client=api_state.get_client())
                     except ApiClientError as error:
@@ -272,6 +278,8 @@ def _render_rule_row(rule) -> None:
                     else:
                         st.success(f"Run {result.status}: {len(result.alerts_created)} alert(s) created.")
                         st.cache_data.clear()
+            if not can_manage:
+                st.caption("Read-only role: detection rules cannot be changed or executed.")
             try:
                 history = rules_api.list_runs(rule.id, client=api_state.get_client())
             except ApiClientError as error:

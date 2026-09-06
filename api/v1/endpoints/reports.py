@@ -3,12 +3,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from api.dependencies.auth import require_permission
 from api.schemas.ai_analysis import AIAnalysisRead
 from api.schemas.report import ReportDraftOutput
 from backend.ai.context import build_evidence_context
 from backend.ai.prompts import TRIAGE_SYSTEM_INSTRUCTION
 from backend.ai.provider import AIProviderError, AIRequest, build_ai_provider
 from backend.ai.triage import TriageValidationError
+from backend.security.rbac import Permission
 from config.settings import load_config
 from db.models import AIAnalysis, Case
 from db.session import get_db
@@ -16,7 +18,12 @@ from db.session import get_db
 router = APIRouter(prefix="/cases/{case_id}/ai", tags=["ai"])
 
 
-@router.post("/report", response_model=AIAnalysisRead, status_code=201)
+@router.post(
+    "/report",
+    response_model=AIAnalysisRead,
+    status_code=201,
+    dependencies=[Depends(require_permission(Permission.REQUEST_AI))],
+)
 def draft_report(case_id: int, db: Session = Depends(get_db)) -> AIAnalysis:
     """Create one reviewable report draft from the active case evidence."""
     if db.get(Case, case_id) is None:

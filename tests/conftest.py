@@ -22,7 +22,7 @@ from api.main import app
 from backend.security.auth import token_digest
 from backend.security.login_limiter import get_login_limiter
 from db.base import Base
-from db.models import AuthSession, User
+from db.models import AuthSession, RoleEnum, User
 from db.seed import seed
 from db.session import get_db
 
@@ -53,6 +53,7 @@ def db_session() -> Iterator[Session]:
         test_user = User(
             username="test-analyst",
             password_hash="test-only-password-hash",
+            role=RoleEnum.ADMIN,
             is_active=True,
         )
         session.add(test_user)

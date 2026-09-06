@@ -12,13 +12,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.security.auth import create_user, normalize_username
-from db.models import User
+from db.models import RoleEnum, User
 from db.session import SessionLocal
 
 
-def bootstrap_user(db: Session, *, username: str, password: str) -> tuple[User, bool]:
+def bootstrap_user(
+    db: Session,
+    *,
+    username: str,
+    password: str,
+    role: RoleEnum = RoleEnum.ANALYST,
+) -> tuple[User, bool]:
     """Create a user idempotently and commit only the new record."""
-    user, created = create_user(db, username=username, password=password)
+    user, created = create_user(db, username=username, password=password, role=role)
     db.commit()
     return user, created
 
@@ -45,6 +51,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Local username (or set DEMO_USERNAME).",
     )
     parser.add_argument(
+        "--role",
+        choices=[role.value for role in RoleEnum],
+        default=RoleEnum.ANALYST.value,
+        help="Initial least-privilege role (default: analyst for the demo workflow).",
+    )
+    parser.add_argument(
         "--generate-password",
         action="store_true",
         help="Generate and print a password once when DEMO_PASSWORD is unset.",
@@ -59,7 +71,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         password, generated = _password_from_operator(generate=args.generate_password)
-        user, created = bootstrap_user(db, username=username, password=password)
+        user, created = bootstrap_user(
+            db, username=username, password=password, role=RoleEnum(args.role)
+        )
         if not created:
             print(f"Demo user '{user.username}' already exists; credentials were not changed.")
             return 0

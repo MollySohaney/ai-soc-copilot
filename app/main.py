@@ -32,6 +32,7 @@ from app.views import (
 )
 from backend.services.health_service import HealthService
 from backend.services.upload_service import AlertUploadService
+from backend.security.rbac import Permission
 from backend.utils.logging import get_logger, initialize_logging
 from config.settings import AppConfig, load_config
 
@@ -47,6 +48,7 @@ class NavigationItem:
     label: str
     icon: str
     renderer: RenderFunction
+    permission: Permission = Permission.READ_SOC
 
 
 def configure_streamlit_page(config: AppConfig) -> None:
@@ -87,6 +89,7 @@ def build_navigation() -> dict[str, NavigationItem]:
                 config=config,
                 upload_service=AlertUploadService(config=config),
             ),
+            permission=Permission.REQUEST_AI,
         ),
         "Investigations": NavigationItem(
             key="investigations",
@@ -129,12 +132,14 @@ def build_navigation() -> dict[str, NavigationItem]:
             label="Integrations",
             icon="⛓",
             renderer=integrations.render,
+            permission=Permission.OPERATE_INTEGRATIONS,
         ),
         "Settings": NavigationItem(
             key="settings",
             label="Settings",
             icon="⚙",
             renderer=settings.render,
+            permission=Permission.MANAGE_USERS,
         ),
     }
 
@@ -164,6 +169,8 @@ def render_sidebar_navigation(navigation: dict[str, NavigationItem]) -> str:
     def render_button(page_name: str) -> None:
         nonlocal current_page
         item = navigation[page_name]
+        if not api_state.has_permission(item.permission):
+            return
         if st.sidebar.button(
             f"{item.icon} {item.label}",
             key=f"nav_{item.key}",
@@ -178,6 +185,11 @@ def render_sidebar_navigation(navigation: dict[str, NavigationItem]) -> str:
     st.sidebar.markdown('<div class="soc-sidebar-divider"></div>', unsafe_allow_html=True)
     for page_name in system_pages:
         render_button(page_name)
+
+    if current_page not in navigation or not api_state.has_permission(
+        navigation[current_page].permission
+    ):
+        current_page = "Dashboard"
 
     st.session_state["selected_page"] = current_page
     return current_page
@@ -205,7 +217,8 @@ def main() -> None:
     navigation = build_navigation()
     current_user = api_state.get_current_user()
     if current_user is not None:
-        st.sidebar.caption(f"Signed in as {current_user.username}")
+        role_label = current_user.role.value.replace("_", " ").title()
+        st.sidebar.caption(f"Signed in as {current_user.username} · {role_label}")
     if st.sidebar.button(
         "Sign out",
         icon=":material/logout:",

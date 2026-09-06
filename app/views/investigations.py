@@ -13,6 +13,7 @@ from api_client import alerts as alerts_api
 from api_client import ai as ai_api
 from api_client import cases as cases_api
 from api_client.http import ApiClientError
+from backend.security.rbac import Permission
 from db.models.enums import AlertStatusEnum, SeverityEnum
 
 from ..components import api_state
@@ -186,6 +187,7 @@ def _render_detail(alert_id: int) -> None:
         """
     )
 
+    can_mutate = api_state.has_permission(Permission.MUTATE_INVESTIGATIONS)
     col_status, col_escalate = st.columns([3, 1])
     with col_status:
         status_options = [ALERT_STATUS_DISPLAY[item] for item in AlertStatusEnum]
@@ -194,8 +196,11 @@ def _render_detail(alert_id: int) -> None:
             options=status_options,
             index=status_options.index(ALERT_STATUS_DISPLAY[alert.status]),
             key=f"status_select_{alert.id}",
+            disabled=not can_mutate,
         )
-        if st.button("Update Status", type="primary", key=f"update_status_{alert.id}"):
+        if can_mutate and st.button(
+            "Update Status", type="primary", key=f"update_status_{alert.id}"
+        ):
             try:
                 alerts_api.update_alert(
                     alert.id,
@@ -209,7 +214,7 @@ def _render_detail(alert_id: int) -> None:
                 st.rerun()
     with col_escalate:
         st.markdown('<div style="margin-top:1.75rem;"></div>', unsafe_allow_html=True)
-        if st.button("Escalate to Case", key=f"escalate_to_case_{alert.id}"):
+        if can_mutate and st.button("Escalate to Case", key=f"escalate_to_case_{alert.id}"):
             try:
                 new_case = cases_api.create_case(
                     title=f"Investigate: {alert.title}",
@@ -311,8 +316,9 @@ def _render_detail(alert_id: int) -> None:
                     </div>
                     """
                 )
-            st.text_area("Add a note", key="investigation_note_input", placeholder="Document findings, decisions, or next steps...")
-            st.button("Add Note", type="primary", key="add_investigation_note")
+            if can_mutate:
+                st.text_area("Add a note", key="investigation_note_input", placeholder="Document findings, decisions, or next steps...")
+                st.button("Add Note", type="primary", key="add_investigation_note")
 
 
 def _render_ai_triage(alert) -> None:  # noqa: ANN001
@@ -320,7 +326,8 @@ def _render_ai_triage(alert) -> None:  # noqa: ANN001
     with st.container(border=True):
         st.subheader("AI analyst assistance")
         st.caption("Advisory only. Deterministic alert evidence remains authoritative.")
-        if st.button("Analyze with AI", type="primary", key=f"analyze_with_ai_{alert.id}", icon=":material/auto_awesome:"):
+        can_request = api_state.has_permission(Permission.REQUEST_AI)
+        if can_request and st.button("Analyze with AI", type="primary", key=f"analyze_with_ai_{alert.id}", icon=":material/auto_awesome:"):
             with api_state.loading("Analyzing linked evidence..."):
                 try:
                     analysis = ai_api.request_triage(alert.id, client=api_state.get_client())
@@ -339,7 +346,10 @@ def _render_ai_triage(alert) -> None:  # noqa: ANN001
         if analysis is None and history.items:
             analysis = history.items[-1]
         if analysis is None:
-            st.info("No AI analysis requested yet. Select Analyze with AI to run an advisory review.")
+            if can_request:
+                st.info("No AI analysis requested yet. Select Analyze with AI to run an advisory review.")
+            else:
+                st.info("No AI analysis exists. Your role can view results but cannot request one.")
             return
         if analysis.status == "unavailable":
             st.warning(analysis.error_message or "AI assistance is unavailable or unconfigured.")
