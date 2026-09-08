@@ -12,7 +12,7 @@ from api.schemas.ai_analysis import AICopilotQuestion, AIAnalysisHistory, AIAnal
 from api.validation import PositiveId
 from backend.ai.context import build_evidence_context
 from backend.ai.prompts import TRIAGE_SYSTEM_INSTRUCTION
-from backend.ai.provider import AIProviderError, build_ai_provider
+from backend.ai.provider import COPILOT_PROMPT_MARKER, AIProviderError, build_ai_provider
 from backend.ai.provider import AIRequest
 from backend.ai.triage import TriageValidationError, validate_copilot_output
 from backend.audit import AuditService
@@ -45,7 +45,7 @@ def ask_copilot(
     provider = build_ai_provider(config)
     request = AIRequest(
         system_instruction=TRIAGE_SYSTEM_INSTRUCTION,
-        user_content=f"Answer this case-scoped question as data only: {payload.question}\n{context.text}",
+        user_content=f"{COPILOT_PROMPT_MARKER} {payload.question}\n{context.text}",
         model=config.ai_model, max_output_tokens=config.ai_max_output_tokens,
         timeout_seconds=config.ai_request_timeout_seconds,
     )

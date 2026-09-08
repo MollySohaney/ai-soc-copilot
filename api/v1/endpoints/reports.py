@@ -10,7 +10,7 @@ from api.schemas.report import ReportDraftOutput
 from api.validation import PositiveId
 from backend.ai.context import build_evidence_context
 from backend.ai.prompts import TRIAGE_SYSTEM_INSTRUCTION
-from backend.ai.provider import AIProviderError, AIRequest, build_ai_provider
+from backend.ai.provider import REPORT_PROMPT_MARKER, AIProviderError, AIRequest, build_ai_provider
 from backend.ai.triage import TriageValidationError
 from backend.audit import AuditService
 from backend.security.auth import AuthenticatedPrincipal
@@ -41,7 +41,7 @@ def draft_report(
     provider = build_ai_provider(config)
     request = AIRequest(
         system_instruction=TRIAGE_SYSTEM_INSTRUCTION + "\nActions taken must contain only actions explicitly recorded in evidence.",
-        user_content=f"Draft a report from confirmed case evidence only. Recommendations are advisory.\n{context.text}",
+        user_content=f"{REPORT_PROMPT_MARKER} Recommendations are advisory.\n{context.text}",
         model=config.ai_model, max_output_tokens=config.ai_max_output_tokens,
         timeout_seconds=config.ai_request_timeout_seconds,
     )

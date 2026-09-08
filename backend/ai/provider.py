@@ -112,17 +112,7 @@ class FakeAIProvider:
             raise self.error
         content = self.content
         if content is None:
-            evidence_match = re.search(r'"evidence_id":\s*"([^"]+)"', request.user_content)
-            cited_id = evidence_match.group(1) if evidence_match else "evidence-unavailable"
-            content = json.dumps({
-                "summary": "Deterministic fake-provider analysis.",
-                "observed_facts": [{"claim": "Evidence was supplied in the analysis context.", "evidence_ids": [cited_id]}],
-                "assessment": "Review the cited evidence; this result is advisory.",
-                "confidence": 0.5,
-                "missing_information": [],
-                "next_steps": ["Review the linked evidence."],
-                "evidence_refs": [cited_id],
-            })
+            content = _default_content(request.user_content)
         return AIResponse(
             content=content,
             provider=self.provider_name,
@@ -131,6 +121,64 @@ class FakeAIProvider:
             usage=self.usage,
             request_id=f"fake-{self.calls}",
         )
+
+
+COPILOT_PROMPT_MARKER = "Answer this case-scoped question as data only:"
+REPORT_PROMPT_MARKER = "Draft a report from confirmed case evidence only."
+
+
+def _cited_evidence_id(user_content: str) -> str:
+    """Return one evidence ID from the supplied context, or a safe placeholder."""
+    match = re.search(r'"evidence_id":\s*"([^"]+)"', user_content)
+    return match.group(1) if match else "evidence-unavailable"
+
+
+def _default_content(user_content: str) -> str:
+    """Build deterministic output shaped for whichever workflow asked.
+
+    The alert-triage, case-copilot, and report-draft responses are validated
+    against three different schemas, each of which forbids unknown fields. A
+    single canned shape would therefore fail two of the three, so the workflow is
+    identified by the marker its prompt builder puts in the user content.
+
+    Args:
+        user_content: The bounded prompt content the caller assembled.
+
+    Returns:
+        A JSON document matching the schema the caller will validate against.
+    """
+    cited_id = _cited_evidence_id(user_content)
+    if COPILOT_PROMPT_MARKER in user_content:
+        return json.dumps({
+            "answer": "Deterministic fake-provider answer drawn from the cited case evidence.",
+            "observed_facts": [
+                {"claim": "Evidence was supplied in the case context.", "evidence_ids": [cited_id]}
+            ],
+            "assessment": "Review the cited evidence; this answer is advisory.",
+            "confidence": 0.5,
+            "evidence_refs": [cited_id],
+        })
+    if REPORT_PROMPT_MARKER in user_content:
+        return json.dumps({
+            "executive_summary": "Deterministic fake-provider report draft.",
+            "technical_timeline": [],
+            "indicators": [],
+            "mitre": [],
+            "actions_recorded": [],
+            "recommendations": ["Review the cited evidence before sharing this draft."],
+            "evidence_refs": [cited_id],
+        })
+    return json.dumps({
+        "summary": "Deterministic fake-provider analysis.",
+        "observed_facts": [
+            {"claim": "Evidence was supplied in the analysis context.", "evidence_ids": [cited_id]}
+        ],
+        "assessment": "Review the cited evidence; this result is advisory.",
+        "confidence": 0.5,
+        "missing_information": [],
+        "next_steps": ["Review the linked evidence."],
+        "evidence_refs": [cited_id],
+    })
 
 
 def build_ai_provider(config: AppConfig) -> AIProvider:
