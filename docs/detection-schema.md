@@ -1,5 +1,7 @@
 # Detection execution schema
 
+**Audience:** anyone changing detection storage, versioning, or window arithmetic.
+
 Phase 4 uses `events.timestamp` as the canonical event time. Evaluators must
 use this column for windows; `ingested_at` describes arrival time only and must
 not move a late-arriving event into a different detection window.
@@ -27,3 +29,9 @@ run start. Every window is `[start, end)`: an event at the left boundary is
 included and an event at the right boundary is assigned to the next window
 (or excluded when it equals the run end). Overlapping runs may examine the
 same events; the execution service's fingerprint prevents duplicate alerts.
+
+## Related
+
+- [docs/detections.md](detections.md) — authoring and executing rules
+- [docs/ingestion.md](ingestion.md) — where events come from
+- [docs/architecture.md](architecture.md) — where detection sits

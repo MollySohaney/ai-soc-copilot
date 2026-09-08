@@ -1,5 +1,7 @@
 # Continuous integration and security scanning
 
+**Audience:** anyone whose pull request is failing, or who wants to run the same checks locally.
+
 GitHub Actions runs from a clean checkout on Python 3.12. The `test` job starts
 PostgreSQL 16 with a health check, installs exactly `requirements.txt`, compiles
 the application, upgrades a clean schema, downgrades and re-upgrades the latest
@@ -43,3 +45,9 @@ No CI secrets are required. If a future provider integration needs credentials,
 keep them in environment-scoped secrets unavailable to pull requests from forks.
 For failures, inspect the first failing job, reproduce its local equivalent, and
 update the relevant dependency/configuration in a separate reviewed commit.
+
+## Related
+
+- [docs/development.md](development.md) — running these checks locally
+- [docs/architecture.md](architecture.md) — what is being tested
+- [docs/api-security.md](api-security.md) — the controls the security tests cover

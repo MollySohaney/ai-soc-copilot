@@ -1,5 +1,7 @@
 # Phase 3 Regression Gate
 
+> **Historical record.** This is a point-in-time execution log from when Phase 3 was delivered, kept for provenance. It is not maintained and may not describe current behaviour. For current behaviour see [docs/ingestion.md](ingestion.md).
+
 This gate was run on 2026-08-31 from branch `phase3-regression-gate`.
 
 ## Database Upgrade

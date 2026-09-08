@@ -1,5 +1,7 @@
 # Operations and recovery runbook
 
+**Audience:** whoever is on the other end of a broken local or demo deployment.
+
 ## Startup and access
 
 Run migrations before starting the API: `python -m alembic upgrade head`.
@@ -61,3 +63,10 @@ and an Analyst alert-to-case smoke request. Counts and relationships matched;
 the seed was idempotent. Cleanup removed only that uniquely named database and
 dump file. Commands were run with PostgreSQL 16 and Alembic head
 `e1f2a3b4c5d6`; secrets were supplied through protected environment variables.
+
+## Related
+
+- [README](../README.md) — quick start
+- [docs/demo.md](demo.md) — the demo this recovers
+- [docs/development.md](development.md) — migrations and reset
+- [docs/reliability-inventory.md](reliability-inventory.md) — idempotency and concurrency

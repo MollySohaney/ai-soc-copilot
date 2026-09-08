@@ -1,5 +1,7 @@
 # Reliability and idempotency inventory
 
+**Audience:** anyone changing a write path and needing to know what already protects it.
+
 | Operation | Transaction boundary | Duplicate/concurrency protection | Retry/outage behavior |
 |---|---|---|---|
 | Alert/case mutation | Domain row, timeline/link rows, and audit event commit together | FK/unique constraints; case-number allocation uses a PostgreSQL transaction advisory lock | Integrity failures roll back; caller retries with an idempotency key where supported |
@@ -14,3 +16,9 @@ Liveness is `/health`; readiness is `/ready` and performs only a safe `SELECT 1`
 Readiness returns generic `503` when PostgreSQL is unavailable. Optional Elastic
 and AI outages are degraded provider results, not process-wide failures. In-memory
 abuse limits remain process-local as documented in `docs/api-security.md`.
+
+## Related
+
+- [docs/architecture.md](architecture.md) — where these guarantees live
+- [docs/operations-runbook.md](operations-runbook.md) — recovery procedures
+- [docs/detections.md](detections.md) — why detection replay is a no-op

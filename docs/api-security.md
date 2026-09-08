@@ -1,5 +1,7 @@
 # API boundary and abuse controls
 
+**Audience:** anyone hardening or debugging the HTTP boundary.
+
 The FastAPI service accepts JSON request bodies only. `API_MAX_BODY_BYTES`
 defaults to 1 MiB and is enforced while receiving the request, before FastAPI or
 Pydantic buffers and parses it. Duplicate query keys, decoded traversal segments,
@@ -49,3 +51,11 @@ UTF-8 text, content signatures, NUL rejection, and size before parsing. Export
 helpers generate attachment basenames and prefix spreadsheet formula cells. Any
 future HTTP download must use these helpers, a server-selected content type, and a
 server-generated `Content-Disposition` filename.
+
+## Related
+
+- [docs/architecture.md](architecture.md) — where these controls sit in the request path
+- [docs/permissions.md](permissions.md) — the role and permission matrix
+- [docs/threat-model.md](threat-model.md) — the threats these boundaries address
+- [docs/ai-safety.md](ai-safety.md) — limits on the AI paths specifically
+- [docs/ci.md](ci.md) — the scans that run on every pull request

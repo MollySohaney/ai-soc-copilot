@@ -215,3 +215,11 @@ remote deployment, new integration, new upload/export format, additional API
 worker, external identity provider, secret manager, or immutable audit sink is
 introduced; or an accepted-risk review trigger is reached.
 
+## Related
+
+- [docs/architecture.md](architecture.md) — the architecture this models
+- [docs/permissions.md](permissions.md) — the authorization matrix
+- [docs/api-security.md](api-security.md) — request boundaries and abuse controls
+- [docs/ai-safety.md](ai-safety.md) — the AI trust boundary
+- [docs/reliability-inventory.md](reliability-inventory.md) — idempotency and concurrency
+- [SECURITY.md](../SECURITY.md) — reporting a vulnerability

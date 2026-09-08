@@ -1,5 +1,7 @@
 # Phase 6 security regression gate
 
+> **Historical record.** This is a point-in-time execution log from when Phase 6 was delivered, kept for provenance. It is not maintained and may not describe current behaviour. For current behaviour see [docs/threat-model.md](threat-model.md), [docs/api-security.md](api-security.md), and [docs/permissions.md](permissions.md).
+
 Executed 2026-09-02 against the stacked Phase 6 history. No product behavior
 changes were made in this gate.
 
