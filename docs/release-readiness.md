@@ -136,6 +136,32 @@ whether their stack is actually working.
 
 **Owner:** Step 2 for the path and the health helper, Step 3 for the narrative.
 
+### B6 — The demo role in the README cannot perform the demo
+
+`README.md:70` instructs the reader to bootstrap `--role analyst`. The permission
+matrix in `backend/security/rbac.py:23` grants Analyst only `READ_SOC`,
+`MUTATE_INVESTIGATIONS`, and `REQUEST_AI`. Mapping that against the routes the demo
+narrative needs:
+
+| Demo action | Route | Permission | Analyst |
+|---|---|---|---|
+| Fixture telemetry ingestion | `POST /api/v1/ingestion/{provider}/sync` | `OPERATE_INTEGRATIONS` | Denied |
+| Detection execution | `POST /api/v1/rules/execute` | `MANAGE_DETECTIONS` | Denied |
+| Alert triage, case mutation, Copilot, reports | various | `MUTATE_INVESTIGATIONS`, `REQUEST_AI` | Allowed |
+| Audit history | `GET /api/v1/audit-events` | `READ_AUDIT` | Denied |
+
+Three of the ten steps in the intended narrative return `403 Insufficient permission.`
+for the account the README tells the reader to create. `OPERATE_INTEGRATIONS` and
+`READ_AUDIT` are Admin-only; `MANAGE_DETECTIONS` belongs to Detection Engineer and
+Admin. Only Admin holds all four.
+
+This is correct RBAC design and should not be weakened. The documentation is what is
+wrong. The demo path must either bootstrap an Admin, or bootstrap several accounts and
+say which one performs which part of the story. Showing a denial deliberately is a
+better demonstration of the security model than hiding it.
+
+**Owner:** Step 2 to choose and implement, Step 3 to narrate the role switches.
+
 ---
 
 ## Correctness
@@ -361,10 +387,10 @@ Recording what checks out, so later steps do not re-litigate it:
 
 ## Prioritized fix order
 
-1. **B1, B4, B5, C2, C8** in Step 2. Without a working, documented demo path nothing
-   downstream can be validated.
-2. **B1 wording, C1** in Step 3, once the path is real and the AI configuration is
-   settled.
+1. **B1, B4, B5, B6, C2, C8** in Step 2. Without a working, documented demo path
+   nothing downstream can be validated.
+2. **B1 wording, B6 narration, C1** in Step 3, once the path is real and the AI
+   configuration and demo roles are settled.
 3. **B3, C1, C5 pointer, C7, M2** in Step 4.
 4. **B2, C3, C4, C5** in Step 5.
 5. **S1** raised in Step 6.
