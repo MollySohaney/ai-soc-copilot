@@ -1,4 +1,4 @@
-# Purpose: Define the minimal runtime dependencies for the project scaffold.
+# Purpose: Pin every runtime and test dependency for the application.
 
 streamlit==1.59.2
 pandas==3.0.3
