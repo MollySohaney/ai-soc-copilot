@@ -1,162 +1,262 @@
 # AI SOC Copilot
 
-AI SOC Copilot is a production-oriented Python application scaffold for SOC analysts who need a clean foundation for AI-assisted alert triage. This repository intentionally focuses on architecture, configuration, logging, and a maintainable Streamlit user experience instead of implementing AI workflows prematurely.
+A working security operations centre workflow: telemetry arrives, deterministic
+detection rules fire, an analyst investigates the evidence, and an AI assistant offers
+an opinion it is required to cite. Built to show how AI belongs in a SOC without being
+allowed to decide anything.
 
-## Highlights
+Clone it and run the whole thing locally in about five minutes. No SIEM licence, no AI
+vendor account, no cloud.
 
-- Python 3.12+ project structure with clear separation of concerns
-- Streamlit frontend with sidebar navigation
-- Centralized configuration loaded at startup
-- Structured JSON logging for application observability
-- Modular backend packages for parsers, services, models, utilities, and security
-- Placeholder alert upload workflow for JSON, CSV, and TXT files
-- Restartable telemetry ingestion scaffold with Elastic and fixture providers
-- Test-ready code with type hints and Google-style docstrings
+> **Screenshot placeholder.** Captures land in `docs/images/` with the guide in
+> [docs/images/README.md](docs/images/README.md). Nothing is shown here rather than
+> showing a mock-up.
 
-## Project Structure
+## Why it exists
 
-```text
-alembic/
-api/
-api_client/
-app/
-backend/
-config/
-data/
-db/
-docs/
-logs/
-tests/
+Most AI-for-security demos put a language model in the decision path and hope. This one
+inverts that. Detections are deterministic and reproducible. Evidence has stable
+identifiers. The AI receives a bounded context assembled from the database, and its
+output is rejected if it cites anything it was not given. Authorization is enforced in
+the service layer, and every state change lands in an append-only audit log.
+
+The interesting part is not that an AI summarises an alert. It is everything that
+constrains it.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph UI["app/ - Streamlit"]
+        V[Views and components]
+    end
+    subgraph Client["api_client/"]
+        T[Typed HTTP client]
+    end
+    subgraph API["api/ - FastAPI"]
+        M[Middleware: body limits, CORS, request validation]
+        R[Versioned routes /api/v1]
+        P[Auth, RBAC, rate and concurrency limits]
+    end
+    subgraph Core["backend/"]
+        I[ingestion: adapters, normalizer, orchestrator]
+        D[detection: DSL, matcher, threshold, sequence]
+        AI[ai: provider, prompts, context, validation]
+        AU[audit: append-only events]
+    end
+    subgraph Data["db/ + alembic/"]
+        PG[(PostgreSQL)]
+    end
+    EX[Elastic - optional]
+    FX[Fixture adapter - default]
+
+    V --> T --> M --> R --> P --> Core --> PG
+    EX -.-> I
+    FX --> I
 ```
 
-## Getting Started
+Four rules keep the layers apart. `app/` renders and never parses or validates. `api/`
+speaks HTTP and never holds business logic. `backend/` holds the workflows. `db/` owns
+persistence, and both the application and Alembic build their connection from the same
+setting, so migrations cannot drift from the code.
 
-1. Create and activate a Python 3.12+ virtual environment.
-2. Install dependencies:
+More detail in [docs/architecture.md](docs/architecture.md).
+
+## What works
+
+**Telemetry ingestion.** Provider-neutral adapters normalise source records into
+canonical events. Elastic is the real provider; an in-memory fixture adapter is the
+default so the demo needs no external service. Syncs are bounded, restartable through
+checkpoints, and idempotent on replay.
+
+**Detection engine.** A structured rule DSL with matcher, threshold, and sequence
+evaluators. Execution is deterministic, uses event time rather than arrival time,
+scans a bounded number of events, and records a durable run before evaluating. Alert
+fingerprints make replay a no-op.
+
+**Analyst workflow.** Dashboard, investigations, alert detail with linked evidence and
+MITRE ATT&CK mapping, escalation to cases, case activity timelines, notes, status and
+priority, and detection rule management. All persisted through PostgreSQL.
+
+**Advisory AI.** Alert triage, case-scoped question answering, and report drafting.
+Each one assembles evidence from the database, sends it as explicitly untrusted data,
+validates the response against a versioned schema, and rejects any citation outside the
+supplied context.
+
+**Security.** Local authentication with opaque bearer sessions, server-enforced RBAC
+across four roles, append-only audit events, request and concurrency limits on the
+expensive paths, and secret redaction throughout.
+
+Some screens remain UI prototypes on static data: MITRE Explorer, Threat Intelligence,
+Reports, Analyze Alert, and Settings. Dashboard, Investigations, and Integrations are
+API-backed but each keeps one static panel. These are labelled in the app.
+
+## Stack
+
+| Layer | Choice |
+|---|---|
+| Language | Python 3.12 in CI, also runs on 3.14 |
+| Frontend | Streamlit 1.59 |
+| API | FastAPI 0.141, Uvicorn, Pydantic 2 |
+| Persistence | PostgreSQL 16, SQLAlchemy 2.0, Alembic |
+| Auth | argon2 password hashing, opaque bearer sessions |
+| Telemetry | Elasticsearch client 8.19, plus an in-memory fixture adapter |
+| Tests | pytest, Streamlit AppTest |
+
+## Quick start
+
+Requires Docker and Python 3.12 or newer.
 
 ```bash
-pip install -r requirements.txt
-```
-
-3. Copy the example environment file and adjust values if needed:
-
-```bash
+python -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
 cp .env.example .env
+make setup
 ```
 
-4. Start PostgreSQL (used by the persistence layer in `db/`):
+`make setup` starts PostgreSQL and waits for its health check, applies migrations,
+loads the deterministic demo dataset, and creates a demo Admin. It is idempotent, so
+running it again changes nothing. The order matters and the target enforces it.
+
+The admin bootstrap prints a generated password once. Export it:
 
 ```bash
-docker compose up -d
+export DEMO_PASSWORD='the password make setup printed'
 ```
 
-5. Apply database migrations:
+Then start the two processes, in separate terminals:
 
 ```bash
-alembic upgrade head
+make api    # FastAPI on :8000
+make ui     # Streamlit on :8501
 ```
 
-6. Seed deterministic demo data (a full SSH brute-force -> valid-login -> privilege-escalation -> persistence attack chain, plus benign noise events, alerts, detection rules, and cases):
+Check everything in one command:
 
 ```bash
-python -m db.seed
+make smoke
 ```
 
-This command is idempotent: every row is looked up by a natural key before insert, so re-running it against the same database does not create duplicates.
+```
+PASS  database            Reachable.
+PASS  migrations          At head (e1f2a3b4c5d6).
+PASS  seed_data           ALERT-0005 present, 5 rules.
+PASS  api_health          Liveness OK.
+PASS  api_ready           Readiness OK.
+PASS  authenticated_read  'demo-admin' can read alerts.
+```
 
-7. Create a local demo login using the interactive password prompt:
+`make` with no target lists everything. Every target is a thin wrapper around a single
+command, so you can always run the command directly instead.
+
+Two notes. If a system PostgreSQL already owns port 5432, set `POSTGRES_PORT` in `.env`
+to something free before `make setup`; the application, Alembic, and Compose all follow
+it. And the demo account is an Admin on purpose, because the full workflow spans four
+permissions and no lesser role holds all of them.
+
+## The demo
+
+Follow [docs/demo.md](docs/demo.md). It walks one intrusion from raw telemetry to a
+documented case: SSH brute force, valid login, privilege escalation via `sudo`, and
+persistence written to `authorized_keys`.
+
+You open `ALERT-0005`, read its three linked evidence rows, check the MITRE mapping
+(T1098.004, Persistence), run AI triage and inspect what it cited, escalate to
+`CASE-2026-0004`, work the case, ask the Copilot a question, draft the report, read the
+audit trail, then restart both processes and watch all of it survive.
+
+Every identifier in that document is deterministic. The seed derives every timestamp
+from a fixed constant, so a clean database produces exactly those records.
+
+## Design decisions
+
+**Deterministic seed data.** Every timestamp derives from one constant and every row is
+looked up by a natural key before insert. Re-seeding is safe, and documentation can
+name specific records without going stale.
+
+**The AI fails closed and cites its sources.** `AI_ENABLED=false` returns "unavailable"
+rather than degrading quietly. Output that cites evidence outside the supplied context
+is rejected before it is persisted. Evidence is labelled untrusted data in the prompt,
+because event content is attacker-controlled.
+
+**Authorization is server-side.** The permission matrix lives in one module and is
+enforced by FastAPI dependencies and inside privileged services. Streamlit uses the
+same matrix to hide unavailable actions, which is a usability aid and not a security
+boundary.
+
+**Audit is append-only.** Security-relevant mutations are recorded with an actor,
+including failures and denials, so a rejected action leaves a trace.
+
+**A typed client between Streamlit and FastAPI.** `api_client/` reuses the API's own
+Pydantic schemas, so the frontend and backend cannot drift. It imports no Streamlit, so
+it is testable on its own.
+
+**Event time, not arrival time.** Detection windows use `events.timestamp`. A
+late-arriving event never lands in the wrong window.
+
+## Testing and CI
 
 ```bash
-python -m db.bootstrap_user --username demo-analyst --role analyst
+make test          # or: pytest
 ```
 
-The command is idempotent and never replaces an existing password. For a disposable demo, `--generate-password` prints a random password once. Automation may supply `DEMO_PASSWORD` through the process environment, but passwords must not be passed as command-line arguments, committed to `.env`, or copied into logs.
+The suite covers API endpoints, ORM and database constraints, seed idempotency, the
+typed client, detection evaluators, AI schema validation and prompt-injection handling,
+RBAC denials, audit records, and the Streamlit pages through AppTest.
 
-Bootstrap the first administrator explicitly with `--role admin`; subsequent user and role management is Admin-only through the API. See [docs/permissions.md](docs/permissions.md) for the server-enforced matrix.
+GitHub Actions runs on every pull request against a real PostgreSQL 16 service:
+compile check, clean migration, a downgrade and re-upgrade, `alembic check` for
+migration drift, then the full suite. Two more jobs run `pip-audit` against the pinned
+dependencies and a gitleaks scan over the full history.
 
-8. Start the Streamlit application and the FastAPI service as two separate local processes:
+Details in [docs/ci.md](docs/ci.md).
 
-```bash
-uvicorn api.main:app --reload --port 8000
-```
+## Security and AI safety
 
-```bash
-streamlit run app/main.py
-```
+- [docs/threat-model.md](docs/threat-model.md) — assets, actors, trust boundaries, threats, and accepted risks
+- [docs/permissions.md](docs/permissions.md) — the role and permission matrix
+- [docs/api-security.md](docs/api-security.md) — request boundaries and abuse controls
+- [docs/ai-safety.md](docs/ai-safety.md) — what the AI receives, what it may cite, and what it cannot do
+- [SECURITY.md](SECURITY.md) — how to report a vulnerability
 
-If the FastAPI service runs on a different host or port, set `API_BASE_URL` in `.env` so the Streamlit frontend's API client (`api_client/`) can reach it — it defaults to `http://localhost:8000`.
+## Limitations
 
-All SOC API routes except login and liveness require an opaque bearer session. The Streamlit login form keeps the token in per-tab server-side session state; PostgreSQL stores only its SHA-256 digest. Configure idle/absolute expiry and login failure limits with the `AUTH_*` variables in `.env.example`.
+This is a portfolio project. It is honest about what that means.
 
-## Running Tests
+**No AI vendor is wired up.** The provider abstraction, prompt construction, evidence
+context, schema validation, and abuse controls are all real and tested. The only
+implemented provider is a deterministic offline fake. Setting `AI_PROVIDER` to a vendor
+name does not reach that vendor; it falls back to unavailable.
 
-```bash
-pytest
-```
+**Single-node, single-tenant, local.** No horizontal scaling, no multi-tenancy, no
+secret manager, no TLS termination, no managed backups. Authentication is local
+accounts only.
 
-The suite (137+ tests) spans backend API tests, ORM/DB-constraint tests, seed-idempotency tests, `api_client` tests, and AppTest-based frontend page tests.
+**Detection runs on demand.** There is no scheduler. Rules execute when you ask them to.
 
-## Telemetry Ingestion
+**The Elastic path is less exercised than the fixture path**, because the default demo
+deliberately avoids requiring a cluster.
 
-Phase 3 introduces bounded telemetry ingestion for normalized events. See [docs/ingestion.md](docs/ingestion.md) for Elastic setup, fixture demo commands, retry/limit settings, and minimum read-only permissions.
+**Five screens are still prototypes** on static data, as listed above.
 
-## API Documentation
+Known gaps and their priority are tracked in
+[docs/release-readiness.md](docs/release-readiness.md).
 
-Once the API service is running, FastAPI auto-generates interactive documentation at `http://localhost:8000/docs` (Swagger UI) and `http://localhost:8000/redoc`.
+## Roadmap
 
-## Demo Analyst Workflow
+- Wire a real AI vendor behind the existing provider abstraction
+- Schedule detection execution instead of running it on demand
+- Replace the remaining prototype screens with live data
+- Broaden ingestion beyond Elastic and fixtures
 
-With the database seeded and both services running, this walkthrough exercises the full API-backed alert-to-case flow:
+## Development
 
-1. Open the **Dashboard** and note the Critical Alerts card.
-2. Go to **Investigations**, filter by severity=Critical, and open **ALERT-0005** ("SSH Authorized Keys Modified for mollysohaney"). ALERT-0006, the correlated chain alert, also appears in this filter — it's part of the same attack narrative, but this walkthrough continues with ALERT-0005 specifically because it has real linked events.
-3. Inspect its **Timeline/Evidence** tab (shows 3 linked events) and its **MITRE** tab (T1098.004, Persistence).
-4. Change its status to "In Progress" using the status selector and the "Update Status" button.
-5. Click **Escalate to Case**.
-6. On the new case's detail page, add an analyst note via the **Activity** tab.
-7. Update the case's priority.
-8. Refresh the browser (or navigate away and back) and confirm the status, note, and priority all persisted — this proves they're backend-persisted through PostgreSQL, not just local Streamlit session state.
+Setup, migrations, conventions, and how to run test subsets are in
+[docs/development.md](docs/development.md). Deeper references:
+[ingestion](docs/ingestion.md), [detections](docs/detections.md),
+[operations runbook](docs/operations-runbook.md),
+[reliability inventory](docs/reliability-inventory.md).
 
-## Current Scope
+## Licence
 
-Phase 2 wires the following pages to the FastAPI + PostgreSQL backend as real, persisted workflows:
-
-- Dashboard
-- Investigations (Alerts)
-- Cases
-- Detection Rules
-
-Phase 3 adds telemetry ingestion status and sync controls to Integrations.
-
-The following pages remain UI prototypes on mock data and are not wired this phase:
-
-- MITRE Explorer
-- Threat Intelligence
-- Reports
-- Analyze Alert
-- Settings
-
-Phase 5 advisory AI setup, safety assumptions, regression commands, and the
-seeded demo runbook are documented in [docs/phase5-regression-gate.md](docs/phase5-regression-gate.md).
-
-Out of scope for this phase (deferred to future phases):
-
-- A detection-rule execution engine
-- AI/LLM functionality
-
-## Development Notes
-
-- Runtime logs are written to `logs/app.log`.
-- Configuration is loaded through `config.settings`.
-- Business logic stays in `backend/`; UI rendering stays in `app/`.
-- Persistence (SQLAlchemy ORM models, sessions, migrations) lives in `db/` and `alembic/`, separate from `backend/` (Streamlit view models) and `api/schemas/` (HTTP DTOs).
-- Tests can be added incrementally under `tests/`.
-- Sample upload fixtures are available in `data/`.
-- `db/seed.py` provides deterministic demo data (`python -m db.seed`); it derives every timestamp from a fixed constant rather than the current time so repeated clean runs produce identical records.
-
-## Suggested Next Steps
-
-- Add unit tests for parsers, validators, and services
-- Introduce persistent storage for alert sessions and reports
-- Add authentication, authorization, and audit controls
-- Integrate approved AI workflows behind secure service boundaries
+MIT. See [LICENSE](LICENSE).
