@@ -86,23 +86,35 @@ Detection is bounded by each rule's own `lookback_window_seconds`, which every s
 rule sets to 3600, so the pipeline asks for the one hour containing the attack.
 Requesting more is rejected with a 422 rather than silently truncated.
 
-You can skip this step entirely. The seed already contains the attack chain and its
-alerts, so the rest of the story works without ingesting anything. Run it when you want
-to see the pipeline move, not just its output.
+**You can skip this step entirely**, and on a first read you probably should. The seed
+already contains the attack chain and its alerts, so the whole story works without
+ingesting anything. Run the pipeline when you want to watch the machinery move rather
+than only see its output.
+
+Skipping also keeps the next screen tidy, because executing the rules adds alerts of its
+own. Step 2 says what you will see either way.
 
 ## Step 2: Find the critical alert
 
-In the Streamlit app, open **Investigations** and filter severity to **Critical**. Two
-alerts match:
+In the Streamlit app, open **Investigations** and filter severity to **Critical**.
+
+If you skipped the pipeline, two alerts match:
 
 | ID | Title |
 |---|---|
 | `ALERT-0006` | Correlated Attack Chain: SSH Brute Force to Persistence |
 | `ALERT-0005` | SSH Authorized Keys Modified for mollysohaney |
 
-Open **`ALERT-0005`**. `ALERT-0006` is the correlated narrative across the whole chain
-and is worth reading, but `ALERT-0005` is the one with linked evidence rows, so it is
-the one that demonstrates the evidence model.
+If you ran the pipeline, there are four. The two extra rows are titled **SSH Authorized
+Keys Modification**, after the rule that produced them, and they have **no external
+ID**. That is the difference between a seeded alert, which carries a curated
+`ALERT-NNNN` identifier, and an alert the detection engine just created, which is
+identified by its fingerprint. Both are real alerts. Only the seeded ones have stable
+names this document can cite.
+
+Open **`ALERT-0005`** either way. `ALERT-0006` is the correlated narrative across the
+whole chain and is worth reading, but `ALERT-0005` is the one with linked evidence rows,
+so it is the one that demonstrates the evidence model.
 
 ## Step 3: Read the evidence, not the summary
 
