@@ -14,7 +14,7 @@ from db.session import SessionLocal, engine
 
 def reset_demo(*, database_name: str, confirmation: str) -> None:
     """Delete all application rows only after explicit environment confirmation."""
-    environment = os.getenv("ENVIRONMENT", "development").lower()
+    environment = (os.getenv("ENVIRONMENT") or os.getenv("APP_ENV") or "development").lower()
     if environment not in {"development", "demo", "test", "local"}:
         raise RuntimeError("Refusing reset outside a local/demo environment.")
     if confirmation != database_name:
