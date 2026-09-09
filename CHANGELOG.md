@@ -44,12 +44,17 @@ features were added.
   send the `Authorization` header that Phase 6 made mandatory
 - The four phase regression gates are marked as point-in-time historical records
 - `db/reset_demo.py` falls back to `APP_ENV` when `ENVIRONMENT` is unset
+- Dependency bumps: streamlit to 1.63.0, pandas to 3.0.5, httpx to 0.28.1, and psycopg
+  to 3.3.5, with the README stack table updated to match
 
 ### Fixed
 
 - The fake AI provider returned triage-shaped output for every workflow, so case
   question answering and report drafting both failed schema validation on the default
   demo path. It now returns output shaped for whichever workflow asked
+- `test_body_media_query_and_path_boundaries` searched the whole validation error for
+  the rejected path value `-1`, including the random UUID request ID, so it failed
+  about one run in four. The request ID is now excluded
 
 ### Removed
 
