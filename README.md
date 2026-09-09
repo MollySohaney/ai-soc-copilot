@@ -87,9 +87,12 @@ supplied context.
 across four roles, append-only audit events, request and concurrency limits on the
 expensive paths, and secret redaction throughout.
 
-Some screens remain UI prototypes on static data: MITRE Explorer, Threat Intelligence,
-Reports, Analyze Alert, and Settings. Dashboard, Investigations, and Integrations are
-API-backed but each keeps one static panel. These are labelled in the app.
+Not everything is wired. MITRE Explorer, Threat Intelligence, Analyze Alert, and
+Settings are prototypes on static data. Dashboard, Investigations, and Integrations are
+API-backed but each keeps one static panel. Reports is a hybrid: its metrics and preview
+are static, while the report-drafting button calls the real API. And the Copilot panel
+in the sidebar, which renders on every page, is a prototype that returns a canned reply;
+the real case-scoped Q&A lives on the case detail view.
 
 ## Stack
 
