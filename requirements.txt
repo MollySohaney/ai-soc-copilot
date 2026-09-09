@@ -1,7 +1,7 @@
 # Purpose: Pin every runtime and test dependency for the application.
 
 streamlit==1.59.2
-pandas==3.0.3
+pandas==3.0.5
 plotly==5.24.1
 pydantic==2.13.4
 python-dotenv==1.2.2
