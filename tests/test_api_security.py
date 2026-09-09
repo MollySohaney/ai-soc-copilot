@@ -48,7 +48,10 @@ def test_body_media_query_and_path_boundaries(client: TestClient) -> None:
     _assert_error(duplicate_json, status=400, code="bad_request")
     _assert_error(traversal, status=400, code="bad_request")
     validation = _assert_error(negative_id, status=422, code="validation_error")
-    assert "-1" not in str(validation)
+    # The request ID is a random UUID, and roughly one in four contains "-1"
+    # after a hyphen, so it is excluded rather than searched for the rejected value.
+    echoed = {key: value for key, value in validation.items() if key != "request_id"}
+    assert "-1" not in str(echoed)
 
 
 def test_validation_errors_do_not_echo_secrets(
