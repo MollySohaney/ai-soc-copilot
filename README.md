@@ -99,7 +99,7 @@ the real case-scoped Q&A lives on the case detail view.
 | Layer | Choice |
 |---|---|
 | Language | Python 3.12 in CI, also runs on 3.14 |
-| Frontend | Streamlit 1.59 |
+| Frontend | Streamlit 1.63 |
 | API | FastAPI 0.141, Uvicorn, Pydantic 2 |
 | Persistence | PostgreSQL 16, SQLAlchemy 2.0, Alembic |
 | Auth | argon2 password hashing, opaque bearer sessions |
