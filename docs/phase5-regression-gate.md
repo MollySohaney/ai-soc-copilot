@@ -1,5 +1,7 @@
 # Phase 5 regression gate and demo runbook
 
+> **Historical record.** This is a point-in-time execution log from when Phase 5 was delivered, kept for provenance. It is not maintained and may not describe current behaviour. For current behaviour see [docs/ai-safety.md](ai-safety.md).
+
 Phase 5 adds advisory AI assistance around the deterministic SOC workflow. The
 provider receives bounded context assembled from the active alert or case; it
 does not receive database, shell, remediation, or arbitrary external-system

@@ -1,5 +1,7 @@
 # Role and permission matrix
 
+**Audience:** anyone reasoning about who can do what, or debugging a 403.
+
 Authorization is enforced by the central matrix in
 `backend/security/rbac.py`, FastAPI permission dependencies, and permission
 checks inside privileged services. Streamlit uses the same matrix only to hide
@@ -20,3 +22,10 @@ lookup. Authenticated users without the declared permission receive
 `403 Insufficient permission.` before resource lookup. Role changes and user
 disablement revoke the target user's live sessions, and the final active Admin
 cannot be demoted or disabled.
+
+## Related
+
+- [docs/architecture.md](architecture.md) — where authorization is enforced
+- [docs/api-security.md](api-security.md) — request boundaries and abuse controls
+- [docs/threat-model.md](threat-model.md) — the threats this matrix addresses
+- [docs/demo.md](demo.md) — which role performs which demo step

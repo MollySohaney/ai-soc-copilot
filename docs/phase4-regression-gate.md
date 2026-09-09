@@ -1,5 +1,7 @@
 # Phase 4 regression gate and demo runbook
 
+> **Historical record.** This is a point-in-time execution log from when Phase 4 was delivered, kept for provenance. It is not maintained and may not describe current behaviour. For current behaviour see [docs/detections.md](detections.md) and [docs/detection-schema.md](detection-schema.md).
+
 Phase 4 uses deterministic, data-only detection rules. There are no AI/LLM
 calls in the detection DSL, matcher, evaluators, execution service, or seeded
 pack. The canonical event-time column is `events.timestamp`; ingestion time is
