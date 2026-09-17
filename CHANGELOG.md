@@ -55,6 +55,19 @@ features were added.
 - `test_body_media_query_and_path_boundaries` searched the whole validation error for
   the rejected path value `-1`, including the random UUID request ID, so it failed
   about one run in four. The request ID is now excluded
+- `make reset` aborted on PostgreSQL. `db/reset_demo.py` deleted from `audit_events`,
+  which the append-only trigger rejects, so the documented way to restore a demo
+  database failed outright. The reset now lifts the trigger inside its own transaction
+  and restores it before committing, leaving the append-only guarantee intact for
+  normal operation
+- Re-seeding never repaired detection rules that predated a column. `get_or_create`
+  applies defaults on insert only, so rules on an upgraded database kept
+  `enabled_for_execution=False`, every rule reported "skipped" instead of executing,
+  and `scripts/demo_pipeline.py` printed that as an OK step. Seeded rule configuration
+  now converges on the spec, while alerts, cases, and events keep their analyst state
+- The reset tests covered only the four refusal guards, and the rest of the suite runs
+  on SQLite, where the append-only trigger does not exist. The delete-and-reseed path
+  is now exercised against PostgreSQL
 
 ### Removed
 

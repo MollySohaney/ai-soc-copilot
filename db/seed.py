@@ -13,6 +13,7 @@ this file may call datetime.now().
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -49,14 +50,26 @@ def get_or_create(
     session: Session,
     model: type,
     defaults: dict[str, Any] | None = None,
+    sync_fields: Sequence[str] | None = None,
     **lookup_kwargs: Any,
 ) -> tuple[Any, bool]:
     """Fetch a row by its natural key, inserting it only if not found.
 
+    By default an existing row is returned untouched, which is what rows
+    carrying analyst state (alerts, cases, events) need: re-seeding must never
+    discard a status change or a note.
+
+    Configuration rows are different. A row created under an older schema keeps
+    whatever column defaults that schema supplied, so the database silently
+    drifts from the spec below and re-seeding never repairs it. Passing
+    ``sync_fields`` makes the named columns converge on the spec for rows that
+    already exist, which is what idempotent seeding is supposed to mean.
+
     Args:
         session: Active SQLAlchemy session.
         model: ORM model class to query/insert.
-        defaults: Extra column values to apply only on insert.
+        defaults: Extra column values to apply on insert.
+        sync_fields: Columns from ``defaults`` to also apply to an existing row.
         lookup_kwargs: Natural-key columns used to find an existing row.
 
     Returns:
@@ -64,6 +77,9 @@ def get_or_create(
     """
     instance = session.query(model).filter_by(**lookup_kwargs).one_or_none()
     if instance is not None:
+        for field in sync_fields or ():
+            if defaults and field in defaults:
+                setattr(instance, field, defaults[field])
         return instance, False
 
     params = {**lookup_kwargs, **(defaults or {})}
@@ -90,6 +106,25 @@ def get_or_create_case_activity(
     instance = CaseActivity(case_id=case_id, message=message, **fields)
     session.add(instance)
     return instance, True
+
+
+# Columns re-applied to detection rules that already exist. `name` is the
+# natural key and is therefore not synced.
+RULE_SYNC_FIELDS = (
+    "description",
+    "source",
+    "language",
+    "query",
+    "severity",
+    "risk_score",
+    "enabled",
+    "mitre_tactic",
+    "mitre_technique_id",
+    "mitre_technique_name",
+    "structured_logic",
+    "rule_type",
+    "enabled_for_execution",
+)
 
 
 def _seed_detection_rules(session: Session) -> dict[str, DetectionRule]:
@@ -188,6 +223,13 @@ def _seed_detection_rules(session: Session) -> dict[str, DetectionRule]:
                 "created_at": at(minutes=-60, seconds=index),
                 "updated_at": at(minutes=-60, seconds=index),
             },
+            # Detection rules are seeded configuration, not analyst work
+            # product, so an existing rule is brought back in line with the
+            # spec above. Without this, a database seeded before a column
+            # existed keeps that column's schema default forever:
+            # `enabled_for_execution` stayed False on upgraded databases and
+            # every rule silently reported "skipped" instead of executing.
+            sync_fields=RULE_SYNC_FIELDS,
         )
         rules[name] = rule
     session.flush()

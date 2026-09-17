@@ -105,3 +105,60 @@ def test_seeded_detection_pack_contains_valid_structured_logic(session: Session)
     assert {parse_logic(rule.structured_logic).rule_type for rule in rules} == {
         "single", "threshold", "sequence"
     }
+
+
+def test_reseeding_repairs_rules_that_drifted_from_the_spec(session: Session) -> None:
+    """Re-seeding restores rule configuration that an older schema left behind.
+
+    `get_or_create` applies defaults on insert only, so a rule row created
+    before `enabled_for_execution` existed kept the column default of False.
+    Every such rule then reported "skipped" instead of executing, and the demo
+    pipeline printed that as an OK step.
+    """
+    seed(session)
+    session.flush()
+
+    rule = session.query(DetectionRule).filter_by(name="SSH Brute Force Detection").one()
+    original_id = rule.id
+    rule.enabled_for_execution = False
+    rule.structured_logic = {"dsl_version": "1", "rule_type": "single",
+                             "condition": {"operator": "exists", "field": "event_action"}}
+    rule.risk_score = 1
+    session.flush()
+
+    seed(session)
+    session.flush()
+
+    restored = session.query(DetectionRule).filter_by(name="SSH Brute Force Detection").one()
+    assert restored.id == original_id, "re-seeding must repair the row, not insert a duplicate"
+    assert restored.enabled_for_execution is True
+    assert restored.structured_logic["rule_type"] == "threshold"
+    assert restored.risk_score == 55
+
+
+def test_reseeding_preserves_analyst_state_on_alerts_and_cases(session: Session) -> None:
+    """Convergence is scoped to configuration; analyst decisions are not clobbered."""
+    seed(session)
+    session.flush()
+
+    alert = session.query(Alert).order_by(Alert.id).first()
+    case = session.query(Case).order_by(Case.id).first()
+    alert.status = "closed"
+    case.status = "resolved"
+    session.flush()
+
+    seed(session)
+    session.flush()
+
+    assert session.get(Alert, alert.id).status == "closed"
+    assert session.get(Case, case.id).status == "resolved"
+
+
+def test_every_seeded_rule_is_enabled_for_execution(session: Session) -> None:
+    """The demo pipeline is only meaningful if the seeded pack actually executes."""
+    seed(session)
+    session.flush()
+
+    rules = session.query(DetectionRule).all()
+    assert rules
+    assert all(rule.enabled_for_execution for rule in rules)
